@@ -1,0 +1,21 @@
+# ===== Astro / Node =====
+node_modules/
+dist/
+.astro/
+*.tsbuildinfo
+
+# ===== 환경변수 (Supabase 등 시크릿) =====
+.env
+.env.local
+.env.*.local
+
+# ===== 시스템 / 에디터 =====
+.DS_Store
+*.swp
+.vscode/
+
+# ===== Claude Code 로컬 상태 =====
+.claude/
+
+# ===== Supabase CLI 로컬 상태 (DB 연결정보 포함) =====
+supabase/.temp/
