@@ -3,10 +3,7 @@ import tailwindcss from '@tailwindcss/vite';
 import obfuscator from 'vite-plugin-javascript-obfuscator';
 
 export default defineConfig({
-  // Phase 5 (custom domain attach) 전 임시값 — GitHub Pages 의 project site 형식.
-  // custom domain 확정 시 site = 'https://<도메인>' 으로 교체 + base 라인 제거.
-  site: 'https://hyeonseokhan.github.io',
-  base: '/kingshot-1767',
+  site: 'https://1767.kingshot.co.kr',
   output: 'static',
   trailingSlash: 'always',
   vite: {

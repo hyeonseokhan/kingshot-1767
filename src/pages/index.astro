@@ -1,10 +1,6 @@
 ---
 // root (`/`) — 현재는 KvK 설문이 단일 서비스이므로 즉시 /survey/ 로 redirect.
 // 추후 신규 서비스 (war-prediction 등) 가 추가되면 서비스 카탈로그 랜딩으로 진화.
-//
-// base path 반영: Pages project site 에서는 `${BASE_URL}/survey/` 로 가야 함.
-// custom domain attach 후엔 BASE_URL='/' 가 되어 자동으로 `/survey/` 로 동작.
-const target = `${import.meta.env.BASE_URL}survey/`.replace(/\/+/g, '/');
 ---
 
 <!doctype html>
@@ -12,11 +8,11 @@ const target = `${import.meta.env.BASE_URL}survey/`.replace(/\/+/g, '/');
   <head>
     <meta charset="utf-8" />
     <title>1767 Server Hub</title>
-    <meta http-equiv="refresh" content={`0; url=${target}`} />
-    <link rel="canonical" href={target} />
+    <meta http-equiv="refresh" content="0; url=/survey/" />
+    <link rel="canonical" href="/survey/" />
     <meta name="robots" content="noindex" />
   </head>
   <body>
-    <p>Redirecting to <a href={target}>{target}</a>...</p>
+    <p>Redirecting to <a href="/survey/">/survey/</a>...</p>
   </body>
 </html>
