@@ -1,0 +1,21 @@
+# Supabase CLI 프로젝트 설정.
+#
+# 주 목적: Edge Function 별 verify_jwt 옵션 명시.
+# 본 파일이 없으면 `supabase functions deploy <name>` 가 기본 verify_jwt=true 로
+# 배포하기 때문에, 클라이언트가 anon key 없이 호출하는 공개 함수가 401 로 망가짐.
+#
+# project_id 는 로컬 Docker 컨테이너 명명용 — production project ref 와 무관.
+
+project_id = "kingshot-1767"
+
+# ============================================================
+# Edge Functions — verify_jwt 정책
+# ============================================================
+# 새 함수 추가 시 정책:
+#   - 클라이언트가 anon key 를 항상 보냄  → 등록 불필요 (default verify_jwt = true)
+#   - 클라이언트가 anon key 없이 호출      → verify_jwt = false 로 등록 필요
+#
+# 현재 함수 (모두 anon key 동봉 — 등록 불필요):
+#   - kvk-survey       (설문 CRUD + PIN 인증 토큰 발급)
+#   - kvk-buff         (버프 예약 RPC)
+#   - tile-match-auth  (PIN 검증 공유 — kvk-survey 와 동일 인증 패턴)

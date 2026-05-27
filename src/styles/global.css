@@ -1,0 +1,102 @@
+@import "tailwindcss";
+
+/*
+ * 글로벌 토큰 + 베이스 — 원본 _site 의 :root 변수와 1:1 매칭.
+ * Phase 6 에서 Tailwind theme 으로 정리 검토. 지금은 시각 동등성 우선.
+ */
+
+:root {
+  --bg: #ffffff;
+  --bg2: #f6f8fa;
+  --bg3: #f0f2f5;
+  --bg-header: #1b1f23;
+  --text: #1f2328;
+  --text2: #656d76;
+  --text3: #8b949e;
+  --border: #d1d9e0;
+  --border2: #e8ecf0;
+  --accent: #0969da;
+  --accent-bg: #ddf4ff;
+  --accent-light: #54aeff;
+  --green: #1a7f37;
+  --green-bg: #dafbe1;
+  --amber: #9a6700;
+  --amber-bg: #fff8c5;
+  --red: #cf222e;
+  --purple: #8250df;
+  --purple-bg: #fbefff;
+
+  --left-w: 20%;
+  --right-w: 20%;
+  --header-h: 52px;
+
+  --font: "Pretendard Variable", "Pretendard", -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, sans-serif;
+  --mono: "JetBrains Mono", "Fira Code", "SF Mono", Consolas, monospace;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--text);
+  font-family: var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  background: var(--bg);
+  overflow: hidden;
+  height: 100vh;
+  height: 100dvh;
+  height: var(--vh-real, 100dvh);
+  display: flex;
+  flex-direction: column;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text3);
+}
+
+@media (max-width: 1024px) {
+  :root {
+    --right-w: 0px;
+  }
+}
+
+@media (max-width: 768px) {
+  :root {
+    --left-w: 0px;
+    --right-w: 0px;
+  }
+  body {
+    overflow-x: hidden;
+  }
+}

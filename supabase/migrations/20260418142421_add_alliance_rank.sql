@@ -1,0 +1,1 @@
+ALTER TABLE members ADD COLUMN IF NOT EXISTS alliance_rank TEXT DEFAULT 'R1';

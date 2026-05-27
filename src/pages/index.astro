@@ -1,19 +1,19 @@
 ---
-const title = 'kingshot-1767 (KvK 설문 사이트) — bootstrap';
+// root (`/`) — 현재는 KvK 설문이 단일 서비스이므로 즉시 /survey/ 로 redirect.
+// 추후 신규 서비스 (war-prediction 등) 가 추가되면 서비스 카탈로그 랜딩으로 진화.
 ---
 
 <!doctype html>
 <html lang="ko">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>{title}</title>
+    <title>1767 Server Hub</title>
+    <meta http-equiv="refresh" content="0; url=/survey/" />
+    <link rel="canonical" href="/survey/" />
+    <meta name="robots" content="noindex" />
   </head>
   <body>
-    <main style="font-family: system-ui; max-width: 640px; margin: 4rem auto; padding: 0 1rem; line-height: 1.6;">
-      <h1>kingshot-1767</h1>
-      <p>1767 서버 KvK 설문 사이트 (분리 작업 중).</p>
-      <p>Phase 1 bootstrap 완료 — Phase 2 소스 이관 대기.</p>
-    </main>
+    <script>location.replace('/survey/');</script>
+    <p>Redirecting to <a href="/survey/">/survey/</a>...</p>
   </body>
 </html>

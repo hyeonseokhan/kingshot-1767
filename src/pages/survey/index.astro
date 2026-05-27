@@ -1,0 +1,861 @@
+---
+import SurveyLayout from '@/layouts/SurveyLayout.astro';
+import '@/styles/kvk-survey/main.css';
+// 버프 예약 다이얼로그 (sk-buff-*) — 마감 후 [버프 예약] 클릭 시 노출.
+import '@/styles/kvk-survey/buff.css';
+---
+
+<SurveyLayout
+  title="KVK 가속권 현황 조사 — Kingshot"
+  description="KVK 이벤트 대비 가속권 보유 현황을 조사하는 페이지입니다"
+>
+  <div class="sk-page" id="sk-page">
+    <!-- 화면 가운데 토스트 (클립보드 복사 피드백) — 타일매치 .tm-toast 패턴 동일. -->
+    <div class="sk-toast" id="sk-toast" role="status" aria-live="polite"></div>
+
+    <!-- 필독 안내문 트리거 — 클릭 시 별도 다이얼로그. 강조 톤 (빨강/주황 + pulse) 으로 주의 환기. -->
+    <button type="button" class="sk-notice-trigger" id="sk-notice-trigger">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="12" y1="16" x2="12" y2="12"></line>
+        <line x1="12" y1="8" x2="12.01" y2="8"></line>
+      </svg>
+      <span data-i18n="survey.kvk.notice.triggerLabel">필독 안내문</span>
+    </button>
+
+    <!-- 필독 안내문 다이얼로그 — 트리거 클릭 시 노출. 닫기 버튼 / ESC / backdrop 으로 닫힘. -->
+    <dialog class="sk-dialog sk-notice-dialog" id="sk-notice-dialog" aria-labelledby="sk-notice-title">
+      <div class="sk-dialog-card">
+        <header class="sk-dialog-head">
+          <strong id="sk-notice-title" data-i18n="survey.kvk.notice.triggerLabel">필독 안내문</strong>
+          <button
+            type="button"
+            class="sk-dialog-close"
+            id="sk-notice-close"
+            aria-label="Close"
+          >&times;</button>
+        </header>
+        <div class="sk-dialog-body">
+          <section class="sk-notice-section">
+            <h4 class="sk-notice-section-title" data-i18n="survey.kvk.notice.signup.title">설문 등록</h4>
+            <ul class="sk-notice-list">
+              <li data-i18n-html="survey.kvk.notice.signup.deadline">마감: <strong>UTC 5월 16일 01:00</strong></li>
+              <li data-i18n-html="survey.kvk.notice.signup.eligibility">자격: <strong>TC 26 이상</strong></li>
+            </ul>
+          </section>
+
+          <section class="sk-notice-section">
+            <h4 class="sk-notice-section-title" data-i18n="survey.kvk.notice.ranking.title">순위 기준</h4>
+            <p class="sk-notice-lead" data-i18n="survey.kvk.notice.ranking.intro">
+              보유 가속권의 예측 점수로 순위 결정.
+            </p>
+            <ul class="sk-notice-list">
+              <li data-i18n-html="survey.kvk.notice.ranking.tier1"><strong>1순위</strong>: 상위 48위 + 이미지 인증</li>
+              <li data-i18n-html="survey.kvk.notice.ranking.tier2"><strong>2순위</strong>: 이미지 인증</li>
+            </ul>
+            <p class="sk-notice-example" data-i18n="survey.kvk.notice.ranking.example">
+              예) 46~48위(미인증)보다 49위(인증)가 우선.
+            </p>
+          </section>
+
+          <section class="sk-notice-section">
+            <h4 class="sk-notice-section-title" data-i18n="survey.kvk.notice.reward.title">순위 보상</h4>
+            <p class="sk-notice-lead" data-i18n-html="survey.kvk.notice.reward.body">
+              상위 48명에게 <strong>1일차(건설) / 4일차(병사)</strong> 국왕스킬 30분씩 순차 부여.
+            </p>
+          </section>
+
+          <section class="sk-notice-section">
+            <h4 class="sk-notice-section-title" data-i18n="survey.kvk.notice.schedule.title">시간 예약</h4>
+            <ul class="sk-notice-list">
+              <li data-i18n-html="survey.kvk.notice.schedule.body1">설문 종료 후 <strong>버프 예약 페이지</strong>에서 사용 시간 직접 선택.</li>
+              <li data-i18n="survey.kvk.notice.schedule.body2">순위 1위부터 순차 진행.</li>
+            </ul>
+          </section>
+
+          <section class="sk-notice-section">
+            <h4 class="sk-notice-section-title" data-i18n="survey.kvk.notice.caution.title">주의사항</h4>
+            <ul class="sk-notice-list">
+              <li data-i18n="survey.kvk.notice.caution.body1">가속권은 최대한 KvK 점수에 투입해 주세요.</li>
+              <li data-i18n-html="survey.kvk.notice.caution.body2"><strong class="sk-notice-warn">허위 제출 / 예측 점수 미달 시 패널티</strong>가 부과됩니다.</li>
+            </ul>
+          </section>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- (A) 시작 다이얼로그 — ID 입력 + 본인 확인 + PIN -->
+    <dialog class="sk-dialog" id="sk-auth-dialog" aria-labelledby="sk-auth-title">
+      <div class="sk-dialog-card">
+        <header class="sk-dialog-head">
+          <strong id="sk-auth-title" data-i18n="survey.kvk.auth.title">시작하기</strong>
+          <button
+            type="button"
+            class="sk-dialog-close"
+            id="sk-auth-close"
+            aria-label="Close"
+          >&times;</button>
+        </header>
+        <div class="sk-dialog-body">
+          <!-- Step 1: ID 입력 -->
+          <div class="sk-step" id="sk-step-id">
+            <label
+              for="sk-id-input"
+              class="sk-label"
+              data-i18n="survey.kvk.auth.idLabel"
+            >킹샷 ID</label>
+            <div class="sk-input-row">
+              <input
+                type="text"
+                id="sk-id-input"
+                inputmode="numeric"
+                autocomplete="off"
+                placeholder="예: 270680423"
+                data-i18n-attr-placeholder="survey.kvk.auth.idPlaceholder"
+              />
+              <button
+                type="button"
+                class="sk-btn sk-btn-primary"
+                id="sk-id-search"
+                data-i18n="survey.kvk.auth.searchButton"
+              >조회</button>
+            </div>
+            <div class="sk-status" id="sk-id-status" role="status" aria-live="polite"></div>
+          </div>
+
+          <!-- Step "blocked": TC 레벨 26 미만 — 등록 불가 안내 후 닫기 -->
+          <div class="sk-step sk-step-blocked" id="sk-step-blocked" hidden>
+            <div class="sk-blocked-icon">⛔</div>
+            <h4 class="sk-blocked-title" data-i18n="survey.kvk.blocked.title">
+              설문에 참여할 수 없는 대상입니다
+            </h4>
+            <p class="sk-blocked-body" data-i18n-html="survey.kvk.blocked.body">
+              TC 레벨 <strong>26 이상</strong> 사용자만 등록 가능합니다.
+            </p>
+            <p class="sk-blocked-current" id="sk-blocked-current">현재 레벨: TC -</p>
+            <div class="sk-dialog-actions">
+              <button
+                type="button"
+                class="sk-btn sk-btn-primary"
+                id="sk-blocked-close"
+                data-i18n="survey.kvk.blocked.closeButton"
+              >닫기</button>
+            </div>
+          </div>
+
+          <!-- Step 2: 본인 확인 -->
+          <div class="sk-step" id="sk-step-confirm" hidden>
+            <div class="sk-player-card" id="sk-player-card">
+              <div class="sk-player-photo-wrap">
+                <div class="sk-player-photo-empty" id="sk-player-photo-empty">?</div>
+                <img class="sk-player-photo" id="sk-player-photo" src="" alt="" hidden />
+              </div>
+              <div class="sk-player-meta">
+                <div class="sk-player-name" id="sk-player-name">-</div>
+                <div class="sk-player-id" id="sk-player-id">-</div>
+              </div>
+            </div>
+            <p class="sk-help" data-i18n="survey.kvk.auth.confirmHelp">
+              본인이 맞으면 PIN 4자리를 입력해 주세요. (신규는 새 PIN 설정, 기존이면 등록한 PIN)
+            </p>
+            <div class="sk-pin-header">
+              <span class="sk-label" data-i18n="survey.kvk.auth.pinLabel">PIN 4자리</span>
+              <span class="sk-pin-hint" id="sk-pin-hint" data-i18n="survey.kvk.auth.pinHintNew">
+                신규 등록 — 새 PIN 으로 사용됩니다
+              </span>
+            </div>
+            <div class="sk-pin-wrap" id="sk-pin-wrap">
+              <!-- 보이지 않는 단일 input + 위에 겹쳐진 4개의 box (tile-match-auth 패턴 차용).
+                   input 의 value 길이에 따라 box 채움 표시. -->
+              <input
+                class="sk-pin-input"
+                id="sk-pin-input"
+                type="text"
+                inputmode="numeric"
+                pattern="[0-9]*"
+                maxlength="4"
+                autocomplete="off"
+                autocapitalize="off"
+                autocorrect="off"
+                spellcheck="false"
+                aria-label="PIN 4자리 입력"
+                data-i18n-attr-aria-label="auth.pinInputAria"
+              />
+              <div class="sk-pin-boxes" id="sk-pin-boxes" aria-hidden="true">
+                <div class="sk-pin-box"></div>
+                <div class="sk-pin-box"></div>
+                <div class="sk-pin-box"></div>
+                <div class="sk-pin-box"></div>
+              </div>
+            </div>
+            <div class="sk-status" id="sk-pin-status" role="status" aria-live="polite"></div>
+            <div class="sk-dialog-actions">
+              <!-- [확인] 버튼 제거 — 4자리 입력 완성 시 자동 호출 + Enter 키도 같은 동작. -->
+              <button
+                type="button"
+                class="sk-btn sk-btn-secondary"
+                id="sk-pin-back"
+                data-i18n="common.back"
+              >뒤로</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- (B) 폼 다이얼로그 (PIN 인증 후 또는 로그인된 사용자가 [등록/수정] 클릭 시 노출) -->
+    <dialog class="sk-dialog sk-form-dialog" id="sk-form-dialog" aria-labelledby="sk-form-title">
+      <div class="sk-dialog-card">
+        <header class="sk-dialog-head">
+          <strong id="sk-form-title" data-i18n="survey.kvk.form.dialogTitle"
+            >내 정보 등록 / 수정</strong
+          >
+          <button
+            type="button"
+            class="sk-dialog-close"
+            id="sk-form-close"
+            aria-label="Close"
+          >&times;</button>
+        </header>
+        <div class="sk-dialog-body">
+          <div class="sk-player-card sk-player-card-compact" id="sk-form-player">
+            <div class="sk-player-photo-wrap">
+              <div class="sk-player-photo-empty" id="sk-form-photo-empty">?</div>
+              <img class="sk-player-photo" id="sk-form-photo" src="" alt="" hidden />
+            </div>
+            <div class="sk-player-meta">
+              <div class="sk-player-name" id="sk-form-name">-</div>
+              <div class="sk-player-id" id="sk-form-id">-</div>
+            </div>
+          </div>
+          <p class="sk-help">
+            <span data-i18n="survey.kvk.form.help"
+              >게임 내 가속권 현황 상태에서 분 단위로 설정한 값을 입력해주세요</span
+            >
+            <button
+              type="button"
+              class="sk-help-image-trigger"
+              id="sk-help-image-trigger"
+              data-i18n="survey.kvk.form.helpImageLink"
+            >이미지 보기</button>
+          </p>
+          <div class="sk-form-warn" role="note">
+            <span class="sk-form-warn-icon" aria-hidden="true">⚠️</span>
+            <span data-i18n="survey.kvk.form.warn"
+              >허위 정보를 제출한 경우, KvK 종료 후 패널티가 부과됩니다.</span
+            >
+          </div>
+          <div class="sk-form-rows">
+            <!-- 가속권 3개 — input.num 자체가 컨테이너, prefix(좌) + unit(우) absolute overlay -->
+            <div class="sk-form-row">
+              <span class="sk-form-row-prefix">
+                <span class="sk-form-row-prefix-emoji" aria-hidden="true">⭐</span>
+                <span data-i18n="survey.kvk.list.thead.general">공용</span>
+              </span>
+              <input
+                type="text"
+                id="sk-input-general"
+                class="sk-form-row-input"
+                inputmode="numeric"
+                autocomplete="off"
+                placeholder="예: 16,767"
+                data-i18n-attr-placeholder="survey.kvk.form.placeholderGeneral"
+              />
+              <span class="sk-form-row-unit" data-i18n="survey.kvk.form.unit">분</span>
+            </div>
+            <div class="sk-form-row">
+              <span class="sk-form-row-prefix">
+                <span class="sk-form-row-prefix-emoji" aria-hidden="true">🛡️</span>
+                <span data-i18n="survey.kvk.list.thead.training">병사</span>
+              </span>
+              <input
+                type="text"
+                id="sk-input-training"
+                class="sk-form-row-input"
+                inputmode="numeric"
+                autocomplete="off"
+                placeholder="예: 11,943"
+                data-i18n-attr-placeholder="survey.kvk.form.placeholderTraining"
+              />
+              <span class="sk-form-row-unit" data-i18n="survey.kvk.form.unit">분</span>
+            </div>
+            <div class="sk-form-row">
+              <span class="sk-form-row-prefix">
+                <span class="sk-form-row-prefix-emoji" aria-hidden="true">🔨</span>
+                <span data-i18n="survey.kvk.list.thead.construction">건설</span>
+              </span>
+              <input
+                type="text"
+                id="sk-input-construction"
+                class="sk-form-row-input"
+                inputmode="numeric"
+                autocomplete="off"
+                placeholder="예: 11,709"
+                data-i18n-attr-placeholder="survey.kvk.form.placeholderConstruction"
+              />
+              <span class="sk-form-row-unit" data-i18n="survey.kvk.form.unit">분</span>
+            </div>
+            <!-- 인증샷 row — grid 2칼럼 [prefix | content].
+                 content 영역은 has-image 클래스에 따라 [파일 선택 라벨] 또는 [thumb+name+제거] 토글. -->
+            <div class="sk-form-row sk-form-row-image" id="sk-form-row-image">
+              <span class="sk-form-row-prefix">
+                <span class="sk-form-row-prefix-emoji" aria-hidden="true">📎</span>
+                <span data-i18n="survey.kvk.form.evidenceLabel">인증샷</span>
+              </span>
+              <div class="sk-evidence-content">
+                <!-- empty 상태 -->
+                <label class="sk-evidence-pick" for="sk-input-evidence">
+                  <span data-i18n="survey.kvk.form.evidencePickButton">파일 선택</span>
+                </label>
+                <!-- selected 상태 -->
+                <div class="sk-evidence-attached">
+                  <div class="sk-evidence-thumb">
+                    <img id="sk-evidence-thumb-img" alt="" />
+                  </div>
+                  <span class="sk-evidence-name" id="sk-evidence-name"></span>
+                  <button
+                    type="button"
+                    class="sk-evidence-remove"
+                    id="sk-evidence-remove"
+                    data-i18n="survey.kvk.form.evidenceRemoveButton"
+                  >제거</button>
+                </div>
+              </div>
+            </div>
+            <!-- file input — visually hidden 으로 row 밖 배치. 라벨이 for 로 trigger. -->
+            <input
+              type="file"
+              id="sk-input-evidence"
+              accept="image/*"
+              class="sk-visually-hidden"
+            />
+          </div>
+          <p
+            class="sk-evidence-hint"
+            data-i18n="survey.kvk.form.evidenceHint"
+          >1080px / WebP / 최대 ~150 KB 로 자동 압축됩니다.</p>
+          <div class="sk-status" id="sk-form-status" role="status" aria-live="polite"></div>
+          <div class="sk-form-actions">
+            <!-- 삭제: 수정 모드일 때만 노출 (JS 가 enterFormMode 에서 hidden 토글). 좌측 끝. -->
+            <button
+              type="button"
+              class="sk-btn sk-btn-danger"
+              id="sk-form-delete"
+              hidden
+              data-i18n="survey.kvk.form.deleteButton"
+            >삭제</button>
+            <!-- 취소 + 저장 — 우측 페어 (Cancel margin-left: auto 로 우측 push) -->
+            <button
+              type="button"
+              class="sk-btn sk-btn-secondary"
+              id="sk-form-cancel"
+              data-i18n="survey.kvk.form.cancelButton"
+            >취소</button>
+            <button
+              type="button"
+              class="sk-btn sk-btn-primary"
+              id="sk-form-save"
+              data-i18n="common.save"
+            >저장</button>
+          </div>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- (C) 목록 영역 — 인증 전엔 잠금 placeholder, 인증 후 .sk-page.is-unlocked 로 노출 -->
+    <section class="sk-list-section">
+      <header class="sk-list-head">
+        <h3 data-i18n="survey.kvk.list.heading">제출 현황</h3>
+        <div class="sk-list-toolbar">
+          <span class="sk-list-count" id="sk-list-count"></span>
+          <input
+            type="search"
+            class="sk-list-search"
+            id="sk-list-search"
+            autocomplete="off"
+            placeholder="닉네임 또는 ID 검색"
+            data-i18n-attr-placeholder="survey.kvk.list.searchPlaceholder"
+            aria-label="닉네임 또는 ID 검색"
+            data-i18n-attr-aria-label="survey.kvk.list.searchPlaceholder"
+          />
+          <button
+            type="button"
+            class="sk-icon-btn"
+            id="sk-list-refresh"
+            aria-label="새로고침"
+            data-i18n-attr-aria-label="common.refresh"
+            title="새로고침"
+            data-i18n-attr-title="common.refresh"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <polyline points="23 4 23 10 17 10"></polyline>
+              <polyline points="1 20 1 14 7 14"></polyline>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+          </button>
+          <!-- 액션 버튼 묶음 — 세 버튼이 한 wrapper 에 들어가 hidden 토글 시 toolbar 의 다른
+               자식 (count, refresh, search) 위치가 흔들리지 않음.
+               세 버튼 모두 초기 hidden — survey-kvk.ts 의 syncListButtons() 가 deadline + auth + admin
+               조건 보고 노출 결정. 각 버튼은 자기 트리거 함수 한 개씩만 갖고 명확히 분리됨:
+                 [테스트]    (sk-list-test)  → onClickTest         admin 만 (마감 전/후 무관)
+                 [버프 예약] (sk-list-buff)  → onClickBuffBooking  마감 후 모두 / admin 항상
+                 [등록/수정] (sk-list-add)   → onClickRegister     마감 전만 -->
+          <div class="sk-list-end-actions">
+            <button
+              type="button"
+              class="sk-btn sk-btn-test sk-list-test"
+              id="sk-list-test"
+              hidden
+            >
+              <span data-i18n="survey.kvk.list.testButton">테스트</span>
+            </button>
+            <button
+              type="button"
+              class="sk-btn sk-btn-primary sk-list-buff"
+              id="sk-list-buff"
+              hidden
+            >
+              <span data-i18n="survey.kvk.list.buffBookingButton">버프 예약</span>
+            </button>
+            <button
+              type="button"
+              class="sk-btn sk-btn-primary sk-list-add"
+              id="sk-list-add"
+              hidden
+            >
+              <span class="sk-list-add-label" data-i18n="survey.kvk.list.addButton">등록 / 수정</span>
+              <span class="sk-list-add-countdown" id="sk-list-add-countdown" aria-live="off">
+                <span id="sk-list-add-countdown-text">--</span>
+              </span>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <!-- 정렬 컨트롤 바 — PC/모바일 공용. 모바일에선 이모지 안내(legend) 도 함께 노출. -->
+      <div class="sk-controls">
+        <div class="sk-legend">
+          <span class="sk-legend-item"><span class="sk-legend-emoji">⭐</span>
+            <span data-i18n="survey.kvk.list.thead.general">공용</span></span>
+          <span class="sk-legend-item"><span class="sk-legend-emoji">🛡️</span>
+            <span data-i18n="survey.kvk.list.thead.training">병사</span></span>
+          <span class="sk-legend-item"><span class="sk-legend-emoji">🔨</span>
+            <span data-i18n="survey.kvk.list.thead.construction">건설</span></span>
+        </div>
+        <!-- 두 그룹 좌우 분리. PC: justify-content: space-between 한 줄. 모바일: 각 그룹 flex-basis 100%
+             → 행 분리 (1행 좌측 정렬, 2행 우측 정렬). -->
+        <div class="sk-sort-bar">
+          <div class="sk-sort-main">
+            <button type="button" class="sk-sort-chip" data-sort="general"
+              data-i18n="survey.kvk.list.thead.general">공용</button>
+            <button type="button" class="sk-sort-chip" data-sort="training"
+              data-i18n="survey.kvk.list.thead.training">병사</button>
+            <button type="button" class="sk-sort-chip" data-sort="construction"
+              data-i18n="survey.kvk.list.thead.construction">건설</button>
+            <button type="button" class="sk-sort-chip" data-sort="updated_at"
+              data-i18n="survey.kvk.list.sortRegistered">등록순</button>
+          </div>
+          <div class="sk-sort-actions">
+            <button type="button" class="sk-sort-chip sk-sort-chip-score" data-sort="score"
+              data-i18n="survey.kvk.list.sortScore">점수</button>
+            <!-- 인증 chip + 순위 복사 — wrap 이 [data-expanded=true] 일 때만 복사 버튼 슬라이드 인.
+                 확장 토글은 sort.key === 'verified' 일 때 JS 가 동기화.
+                 🎁 이모지 = "이 정렬 기준의 상위 48명에게 버프 보상" 이라는 의미를 chip + 아바타 동시 사용. -->
+            <span class="sk-verified-wrap" id="sk-verified-wrap">
+              <button type="button" class="sk-sort-chip sk-sort-chip-verified" data-sort="verified">
+                <span class="sk-sort-chip-emoji" aria-hidden="true">🎁</span>
+                <span data-i18n="survey.kvk.list.sortVerified">인증</span>
+              </button>
+              <button type="button" class="sk-verified-copy" id="sk-sort-verified-copy"
+                data-i18n-attr-aria-label="survey.kvk.list.copyRanking"
+                aria-label="순위 복사">
+                <svg class="sk-verified-copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+                <span class="sk-verified-copy-text" data-i18n="survey.kvk.list.copyRanking">순위 복사</span>
+              </button>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 잠금 placeholder — .sk-page.is-unlocked 일 땐 CSS 로 숨김 -->
+      <div class="sk-locked-card" id="sk-locked-card">
+        <div class="sk-locked-title" data-i18n="survey.kvk.locked.title">
+          🔒 현황 열람이 잠겨있습니다
+        </div>
+        <p class="sk-locked-body" data-i18n="survey.kvk.locked.body">
+          [등록 / 수정] 을 완료하면 다른 참가자들의 제출 현황을 볼 수 있어요.
+        </p>
+      </div>
+
+      <div class="sk-table-wrap">
+        <table class="sk-table" id="sk-table">
+          <thead>
+            <tr>
+              <th class="sk-th sk-th-rank" data-i18n="survey.kvk.list.thead.rank">#</th>
+              <th class="sk-th sk-th-player" data-i18n="survey.kvk.list.thead.player">참가자</th>
+              <th class="sk-th sk-th-num" data-i18n="survey.kvk.list.thead.general">공용</th>
+              <th class="sk-th sk-th-num" data-i18n="survey.kvk.list.thead.training">병사</th>
+              <th class="sk-th sk-th-num" data-i18n="survey.kvk.list.thead.construction">건설</th>
+              <th class="sk-th sk-th-num sk-th-total" data-i18n="survey.kvk.list.thead.total">합계</th>
+              <th class="sk-th sk-th-verified" data-i18n="survey.kvk.list.thead.verified">인증</th>
+              <th class="sk-th sk-th-time" data-i18n="survey.kvk.list.thead.updated">등록시간</th>
+            </tr>
+          </thead>
+          <tbody id="sk-tbody"></tbody>
+        </table>
+        <div class="sk-empty" id="sk-empty" hidden data-i18n="survey.kvk.list.empty">
+          아직 제출된 데이터가 없어요. 첫 번째 참가자가 되어 주세요!
+        </div>
+        <div class="sk-loading" id="sk-loading" data-i18n="common.loading">로딩 중...</div>
+      </div>
+    </section>
+
+    <!-- (D-1) 행 클릭 시 상세 다이얼로그 (읽기 전용) -->
+    <dialog class="sk-dialog" id="sk-detail-dialog" aria-labelledby="sk-detail-title">
+      <div class="sk-dialog-card">
+        <header class="sk-dialog-head">
+          <strong id="sk-detail-title" data-i18n="survey.kvk.detail.title">상세 정보</strong>
+          <button
+            type="button"
+            class="sk-dialog-close"
+            id="sk-detail-close"
+            aria-label="Close"
+          >&times;</button>
+        </header>
+        <div class="sk-dialog-body">
+          <div class="sk-player-card" id="sk-detail-player">
+            <div class="sk-player-photo-wrap">
+              <div class="sk-player-photo-empty" id="sk-detail-photo-empty">?</div>
+              <img class="sk-player-photo" id="sk-detail-photo" src="" alt="" hidden />
+            </div>
+            <div class="sk-player-meta">
+              <div class="sk-player-name" id="sk-detail-name">-</div>
+              <div class="sk-player-id" id="sk-detail-id">-</div>
+              <div class="sk-detail-time" id="sk-detail-updated">-</div>
+            </div>
+            <!-- 인증샷 버튼 — 이미지 있으면 초록 테두리/아이콘 + 클릭 시 lightbox.
+                 없으면 회색 테두리 + 비활성. -->
+            <button
+              type="button"
+              class="sk-detail-evidence-btn"
+              id="sk-detail-evidence-btn"
+              data-i18n-attr-title="survey.kvk.detail.evidenceButtonTitleEmpty"
+              title="인증샷 없음"
+              disabled
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                <circle cx="8.5" cy="8.5" r="1.5"/>
+                <polyline points="21 15 16 10 5 21"/>
+              </svg>
+            </button>
+          </div>
+
+          <div class="sk-detail-bars">
+            <!-- 단위 토글 — 시/분/초 ↔ 총 분 수. 첫 가속권 바 위쪽에 우측 정렬. -->
+            <div class="sk-detail-bars-header">
+              <button
+                type="button"
+                class="sk-detail-unit-toggle"
+                id="sk-detail-unit-toggle"
+                data-mode="hms"
+                data-i18n="survey.kvk.detail.unit.toggleToMin"
+              >분 단위로 보기</button>
+            </div>
+            <div class="sk-detail-bar">
+              <div class="sk-detail-bar-head">
+                <span class="sk-detail-bar-label"><span class="sk-detail-emoji">⭐</span>
+                  <span data-i18n="survey.kvk.form.general">공용 가속권</span></span>
+                <span class="sk-detail-bar-value" id="sk-detail-general">-</span>
+              </div>
+              <div class="sk-detail-bar-track">
+                <div class="sk-detail-bar-fill" id="sk-detail-bar-general"></div>
+                <div class="sk-detail-bar-pct" id="sk-detail-pct-general">-</div>
+              </div>
+            </div>
+            <div class="sk-detail-bar">
+              <div class="sk-detail-bar-head">
+                <span class="sk-detail-bar-label"><span class="sk-detail-emoji">🛡️</span>
+                  <span data-i18n="survey.kvk.form.training">병사 훈련 가속권</span></span>
+                <span class="sk-detail-bar-value" id="sk-detail-training">-</span>
+              </div>
+              <div class="sk-detail-bar-track">
+                <div class="sk-detail-bar-fill" id="sk-detail-bar-training"></div>
+                <div class="sk-detail-bar-pct" id="sk-detail-pct-training">-</div>
+              </div>
+            </div>
+            <div class="sk-detail-bar">
+              <div class="sk-detail-bar-head">
+                <span class="sk-detail-bar-label"><span class="sk-detail-emoji">🔨</span>
+                  <span data-i18n="survey.kvk.form.construction">건설 가속권</span></span>
+                <span class="sk-detail-bar-value" id="sk-detail-construction">-</span>
+              </div>
+              <div class="sk-detail-bar-track">
+                <div class="sk-detail-bar-fill" id="sk-detail-bar-construction"></div>
+                <div class="sk-detail-bar-pct" id="sk-detail-pct-construction">-</div>
+              </div>
+            </div>
+          </div>
+
+          <hr class="sk-detail-divider" />
+
+          <div class="sk-detail-total">
+            <span class="sk-detail-total-label" data-i18n="survey.kvk.list.thead.total">합계</span>
+            <span class="sk-detail-total-value" id="sk-detail-total">-</span>
+          </div>
+
+          <hr class="sk-detail-divider" />
+
+          <!-- KvK 예상 점수 — PLAN.md 의 계산식 (1일차 건설 / 4일차 훈련+공용) -->
+          <div class="sk-detail-scores">
+            <h5 class="sk-detail-scores-title">
+              <span data-i18n="survey.kvk.detail.scores.title">KvK 예상 점수</span>
+              <span class="sk-detail-scores-note" data-i18n="survey.kvk.detail.scores.errorNote">오차 ±5%</span>
+            </h5>
+            <div class="sk-detail-score">
+              <div class="sk-detail-score-head">
+                <span class="sk-detail-score-label" data-i18n="survey.kvk.detail.scores.day1Label">🏗️ 1일차 (건설)</span>
+                <span class="sk-detail-score-value" id="sk-detail-day1-value">-</span>
+              </div>
+              <div class="sk-detail-score-meta" id="sk-detail-day1-range">-</div>
+            </div>
+            <div class="sk-detail-score">
+              <div class="sk-detail-score-head">
+                <span class="sk-detail-score-label" data-i18n="survey.kvk.detail.scores.day4Label">⚔️ 4일차 (훈련 + 공용)</span>
+                <span class="sk-detail-score-value" id="sk-detail-day4-value">-</span>
+              </div>
+              <div class="sk-detail-score-meta" id="sk-detail-day4-range">-</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- (D-2) 도움말 이미지 lightbox — 아무 곳이나 클릭하면 닫힘.
+         src 는 의도적으로 비워둠. data-src 에 실제 경로 두고, openImageDialog() 가
+         첫 오픈 시점에 src 를 set. 이유: loading="lazy" + <dialog>(display:none) 조합에서
+         카운트다운 1s tick 의 layout 변경이 IntersectionObserver 재평가 트리거 → 매초 fetch
+         발생. JS 제어로 첫 오픈 시 1회만 로드하면 이후 브라우저 캐시 히트. -->
+    <dialog class="sk-image-dialog" id="sk-image-dialog" aria-label="가속권 현황 화면 예시">
+      <img
+        class="sk-image-dialog-img"
+        id="sk-image-dialog-img"
+        data-src="/images/survey/speedup-stats.png"
+        alt="게임 내 가속권 현황 화면"
+      />
+    </dialog>
+
+    <!-- (D-3) 인증샷 lightbox — 상세 다이얼로그의 이미지 버튼 클릭 시 동적 src 로 표시.
+         도움말 lightbox 와 같은 click-to-close 패턴이지만 src 가 동적이라 별도 dialog 로 분리. -->
+    <dialog class="sk-image-dialog" id="sk-evidence-lightbox" aria-label="인증샷">
+      <img
+        class="sk-image-dialog-img"
+        id="sk-evidence-lightbox-img"
+        src=""
+        alt="인증샷"
+      />
+    </dialog>
+
+    <!-- ===== 버프 예약 다이얼로그 (마감 후 [버프 예약] 클릭 시 노출) ===== -->
+    <dialog class="sk-buff-overlay" id="sk-buff-overlay" aria-labelledby="sk-buff-overlay-title">
+      <div class="sk-buff-overlay-card">
+        <header class="sk-buff-overlay-head">
+          <strong id="sk-buff-overlay-title" data-i18n="survey.kvkBuff.title">버프 예약</strong>
+          <!-- !!! TEST_MODE 표시 — sk-buff-page.is-test 일 때만 노출 (CSS) -->
+          <span class="sk-buff-test-badge" data-i18n="survey.kvkBuff.test.badge">TEST</span>
+
+          <!-- admin 도구 — .sk-buff-page.is-admin 일 때만 노출 (CSS).
+               [예약 시작]: 시작 전(.is-started X)만 활성, 시작 후 disabled
+               [예약 마감]: 시작 후만 활성, 시작 전 disabled
+               JS 가 disabled 토글 + state.bootstrapped_at 동기화 -->
+          <button type="button" class="sk-buff-admin-btn sk-buff-start-btn" id="sk-buff-start-btn"
+            data-i18n="survey.kvkBuff.startButton">예약 시작</button>
+          <button type="button" class="sk-buff-admin-btn sk-buff-finalize-btn" id="sk-buff-finalize-btn"
+            data-i18n="survey.kvkBuff.finalizeButton">예약 마감</button>
+
+          <!-- !!! TEST_MODE 전용 [재시작] — admin + test mode 동시 만족 시 노출 (CSS) -->
+          <button type="button" class="sk-buff-test-reset-btn" id="sk-buff-test-reset"
+            data-i18n="survey.kvkBuff.test.resetButton">재시작</button>
+          <button type="button" class="sk-dialog-close" id="sk-buff-overlay-close" aria-label="Close">&times;</button>
+        </header>
+        <div class="sk-buff-overlay-body">
+          <div class="sk-buff-page" id="sk-buff-page">
+            <button type="button" class="sk-notice-trigger" id="sk-buff-notice-trigger">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="16" x2="12" y2="12"></line>
+                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+              </svg>
+              <span data-i18n="survey.kvkBuff.notice.triggerLabel">필독 안내문</span>
+            </button>
+
+            <!-- !!! TEST_MODE 전용 — 선착순 진행률 카드. 노출 결정은 CSS (.sk-buff-page.is-test) 한 곳에서만.
+                 (hidden 속성 사용 금지 — CSS display 토글과 충돌 시 일부 브라우저에서 안 풀리는 회귀.)
+                 운영(순차)에선 .sk-buff-progress { display:none } 로 자동 hide. -->
+            <section class="sk-buff-progress" id="sk-buff-progress">
+              <div class="sk-buff-progress-head">
+                <span class="sk-buff-progress-label" id="sk-buff-progress-label">선착순 진행</span>
+                <span class="sk-buff-progress-count">
+                  <span id="sk-buff-progress-done">0</span>
+                  <span class="sk-buff-progress-divider">/</span>
+                  <span id="sk-buff-progress-total">0</span>
+                </span>
+              </div>
+              <div class="sk-buff-progress-bar">
+                <div class="sk-buff-progress-fill" id="sk-buff-progress-fill" style="width:0%"></div>
+              </div>
+            </section>
+
+            <section class="sk-buff-current" id="sk-buff-current">
+              <div class="sk-buff-current-main">
+                <div class="sk-buff-current-photo-wrap">
+                  <div class="sk-buff-current-photo-empty" id="sk-buff-current-photo-empty">?</div>
+                  <img class="sk-buff-current-photo" id="sk-buff-current-photo" alt="" hidden />
+                </div>
+                <div class="sk-buff-current-meta">
+                  <div class="sk-buff-current-name" id="sk-buff-current-name">-</div>
+                  <div class="sk-buff-current-id" id="sk-buff-current-id">-</div>
+                </div>
+                <!-- [변경] — admin 만 노출 (CSS 게이트). 클릭 시 사용자 목록 다이얼로그.
+                     기존 [스킵] 자동 swap 패턴 → admin 이 명시적으로 다음 차례 사용자 지정. -->
+                <button type="button" class="sk-buff-skip-btn" id="sk-buff-replace-btn" data-i18n="survey.kvkBuff.replaceButton">변경</button>
+                <span class="sk-buff-current-badge">
+                  <span data-i18n="survey.kvkBuff.selecting">선택중</span>
+                  <span class="sk-buff-current-elapsed" id="sk-buff-current-elapsed">0:00</span>
+                </span>
+                <svg class="sk-buff-current-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </div>
+              <div class="sk-buff-current-queue-wrap">
+                <div class="sk-buff-current-queue">
+                  <div class="sk-buff-queue-label" data-i18n="survey.kvkBuff.nextLabel">다음 차례</div>
+                  <ol class="sk-buff-queue-list" id="sk-buff-current-queue"></ol>
+                </div>
+              </div>
+              <div class="sk-buff-current-completed" data-i18n="survey.kvkBuff.completed">
+                모든 사용자가 시간을 선택했습니다
+              </div>
+              <!-- admin [예약 마감] 호출 후 노출 — .is-finalized 클래스로 CSS 분기. -->
+              <div class="sk-buff-current-finalized" data-i18n="survey.kvkBuff.finalizedMsg">
+                예약이 마감됐습니다
+              </div>
+            </section>
+
+            <!-- 시간표 — 헤더 (KST/필터/복사) + 슬롯 목록 두 영역으로 분리. 그리드 박스 한 단위로 시각 통합. -->
+            <div class="sk-buff-grid" id="sk-buff-grid">
+              <header class="sk-buff-grid-head">
+                <button type="button" class="sk-buff-toggle" id="sk-buff-tz-toggle">KST → UTC</button>
+                <button type="button" class="sk-buff-toggle" id="sk-buff-filter-toggle" data-i18n="survey.kvkBuff.filterAvailable">남은 자리</button>
+                <button type="button" class="sk-buff-toggle" id="sk-buff-copy-toggle" data-i18n="survey.kvkBuff.copyButton">복사하기</button>
+              </header>
+              <div class="sk-buff-grid-list" id="sk-buff-grid-list"></div>
+            </div>
+
+            <div class="sk-buff-locked" id="sk-buff-locked" hidden>
+              <div class="sk-buff-locked-title" data-i18n="survey.kvkBuff.locked.title">🔒 아직 예약을 시작할 수 없어요</div>
+              <p class="sk-buff-locked-body" id="sk-buff-locked-body" data-i18n="survey.kvkBuff.locked.bodyBeforeDeadline">
+                설문 마감 (UTC 5월 16일 01:00) 후 자동으로 예약이 시작됩니다.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- 버프 안내문 다이얼로그 -->
+    <dialog class="sk-dialog sk-buff-notice-dialog" id="sk-buff-notice-dialog" aria-labelledby="sk-buff-notice-title">
+      <div class="sk-dialog-card">
+        <header class="sk-dialog-head">
+          <strong id="sk-buff-notice-title" data-i18n="survey.kvkBuff.notice.triggerLabel">필독 안내문</strong>
+          <button type="button" class="sk-dialog-close" id="sk-buff-notice-close" aria-label="Close">&times;</button>
+        </header>
+        <div class="sk-dialog-body">
+          <section class="sk-notice-section">
+            <h4 class="sk-notice-section-title" data-i18n="survey.kvkBuff.notice.flow.title">진행 방식</h4>
+            <ul class="sk-notice-list">
+              <li data-i18n-html="survey.kvkBuff.notice.flow.body1"><strong>선착순</strong> — 누구든 빈 시간대를 자유롭게 선택할 수 있습니다.</li>
+              <li data-i18n-html="survey.kvkBuff.notice.flow.body2">먼저 선점한 사람이 우선. 동일 시간에 한 명만 들어갑니다.</li>
+            </ul>
+          </section>
+          <section class="sk-notice-section">
+            <h4 class="sk-notice-section-title" data-i18n="survey.kvkBuff.notice.window.title">선택 가능 시간</h4>
+            <p class="sk-notice-lead" data-i18n-html="survey.kvkBuff.notice.window.body">
+              <strong>UTC 5월 16일 01:00 ~ 03:00</strong> (2시간) 동안 지정 가능.
+            </p>
+          </section>
+          <section class="sk-notice-section">
+            <h4 class="sk-notice-section-title" data-i18n="survey.kvkBuff.notice.caution.title">주의사항</h4>
+            <ul class="sk-notice-list">
+              <li data-i18n-html="survey.kvkBuff.notice.caution.body">선택된 시간은 <strong class="sk-notice-warn">변경이 어렵습니다</strong> — 신중히 선택해 주세요.</li>
+            </ul>
+          </section>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- 슬롯 선택 confirm -->
+    <dialog class="sk-buff-confirm" id="sk-buff-confirm-dialog" aria-label="시간 선택 확인">
+      <div class="sk-buff-confirm-card">
+        <p class="sk-buff-confirm-body">
+          <strong id="sk-buff-confirm-time">00:00</strong>
+          <span data-i18n="survey.kvkBuff.confirm.pickSlot">시간을 선택하시겠습니까?</span>
+        </p>
+        <div class="sk-buff-confirm-actions">
+          <button type="button" class="sk-buff-confirm-cancel" id="sk-buff-confirm-cancel" data-i18n="survey.kvkBuff.confirm.cancel">취소</button>
+          <button type="button" class="sk-buff-confirm-ok" id="sk-buff-confirm-ok" data-i18n="survey.kvkBuff.confirm.pick">선택</button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- [변경] — admin 이 다음 차례 사용자 지정 다이얼로그.
+         사용자 목록 (#sk-buff-replace-list) 은 클라가 동적 렌더 (turn_idx 순).
+         완료 슬롯 점유 사용자 + 현재 차례 본인은 disabled. -->
+    <dialog class="sk-buff-replace" id="sk-buff-replace-dialog" aria-labelledby="sk-buff-replace-title">
+      <div class="sk-buff-replace-card">
+        <header class="sk-buff-replace-head">
+          <strong id="sk-buff-replace-title" data-i18n="survey.kvkBuff.replaceTitle">차례 변경</strong>
+          <button type="button" class="sk-dialog-close" id="sk-buff-replace-close" aria-label="Close">&times;</button>
+        </header>
+        <p class="sk-buff-replace-help" data-i18n="survey.kvkBuff.replaceHelp">
+          현재 차례 사용자와 자리를 교환할 대상을 선택하세요.
+        </p>
+        <ul class="sk-buff-replace-list" id="sk-buff-replace-list" role="radiogroup">
+          <!-- 클라가 turn_idx 순으로 채움 -->
+        </ul>
+        <div class="sk-buff-replace-actions">
+          <button type="button" class="sk-buff-confirm-cancel" id="sk-buff-replace-cancel" data-i18n="survey.kvkBuff.confirm.cancel">취소</button>
+          <button type="button" class="sk-buff-confirm-ok" id="sk-buff-replace-ok" data-i18n="survey.kvkBuff.confirm.apply" disabled>적용</button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- swap confirm (admin) -->
+    <dialog class="sk-buff-confirm" id="sk-buff-swap-dialog" aria-label="자리 교환 확인">
+      <div class="sk-buff-confirm-card">
+        <p class="sk-buff-confirm-body" id="sk-buff-swap-body"></p>
+        <div class="sk-buff-confirm-actions">
+          <button type="button" class="sk-buff-confirm-cancel" id="sk-buff-swap-cancel" data-i18n="survey.kvkBuff.confirm.cancel">취소</button>
+          <button type="button" class="sk-buff-confirm-ok" id="sk-buff-swap-ok" data-i18n="survey.kvkBuff.confirm.confirm">확인</button>
+        </div>
+      </div>
+    </dialog>
+  </div>
+
+  <script>
+    import '@/scripts/pages/survey';
+  </script>
+</SurveyLayout>

@@ -1,0 +1,94 @@
+---
+// SurveyLayout — 외부 도메인 (survey.kingshot.wooju-home.org) 용 미니멀 레이아웃.
+// PNX 사이트의 Header/MobileNav/LeftNav/AuthDialog 일체 미포함 (외부 유저 노출 차단).
+// 공통 i18n boot + LangSwitcher 만 유지.
+import '@/styles/global.css';
+import '@/styles/components.css';
+import LangSwitcher from '@/components/LangSwitcher.astro';
+
+interface Props {
+  title?: string;
+  description?: string;
+}
+
+const { title = 'KVK Speed-up Survey', description = 'KVK speed-up inventory survey' } =
+  Astro.props;
+---
+
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+    <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css"
+    />
+    <script>
+      import { bootI18n } from '@/i18n';
+      bootI18n();
+
+      // iOS Safari focus ring 차단 — 터치 환경에선 키보드 내비 없으므로 의미 없음.
+      // CSS (:focus-visible) 만으론 iOS 가 tap 도 :focus-visible 로 매칭하는 비표준 동작 때문에
+      // 일부 케이스 잔존 → click 후 즉시 blur() 로 focus 자체를 떼어내 ring 차단.
+      // 터치 환경 (hover:none, pointer:coarse) 에서만 적용 — 데스크탑 키보드 내비 a11y 보존.
+      if (matchMedia('(hover: none) and (pointer: coarse)').matches) {
+        document.addEventListener('click', (e) => {
+          const btn = (e.target as HTMLElement | null)?.closest('button');
+          if (btn) btn.blur();
+        });
+      }
+    </script>
+  </head>
+  <body class="survey-body">
+    <header class="survey-header">
+      <div class="survey-header-inner">
+        <h1 class="survey-brand" data-i18n="survey.brand">KVK 가속권 현황 조사</h1>
+        <div class="survey-header-actions">
+          <!-- 로그아웃 버튼 — 인증 세션이 있을 때만 노출 (survey-kvk.ts 가 .is-authed 토글). -->
+          <button
+            id="sk-logout-btn"
+            class="survey-logout-btn"
+            type="button"
+            hidden
+            data-i18n-attr-title="survey.header.logoutTooltip"
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+              <polyline points="16 17 21 12 16 7"></polyline>
+              <line x1="21" y1="12" x2="9" y2="12"></line>
+            </svg>
+            <span data-i18n="survey.header.logout">로그아웃</span>
+          </button>
+          <LangSwitcher />
+        </div>
+      </div>
+    </header>
+    <main class="survey-main">
+      <slot />
+    </main>
+    <footer class="survey-footer">
+      <span class="survey-footer-tag" data-i18n="survey.footer"
+        >KVK Speed-up Survey · 익명 조사용 페이지</span
+      >
+      <span class="survey-footer-copy">© 2026 PNX Toycode. All rights reserved.</span>
+    </footer>
+  </body>
+</html>

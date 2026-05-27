@@ -1,0 +1,150 @@
+---
+// 헤더의 🌐 KOR/ENG 토글. 외부 클릭 시 닫힘. 동작 로직: src/scripts/components/lang-switcher.ts
+//
+// 자기 자신의 라벨 텍스트는 i18n 거치지 않고 두 언어 모두 그대로 노출 (사용자가 현재 언어를 모르는
+// 상태에서도 알아볼 수 있게). 트리거 라벨 (KOR/ENG) 만 클라이언트가 lang 에 따라 갱신.
+---
+
+<div class="lang-switcher" id="lang-switcher" data-open="false">
+  <button
+    class="lang-trigger"
+    id="lang-trigger"
+    type="button"
+    aria-haspopup="menu"
+    aria-expanded="false"
+  >
+    <span class="lang-icon" aria-hidden="true">🌐</span>
+    <span class="lang-current" id="lang-current">KOR</span>
+    <svg
+      class="lang-caret"
+      width="10"
+      height="10"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2.5"
+      stroke-linecap="round"
+      aria-hidden="true"
+    >
+      <polyline points="6 9 12 15 18 9"></polyline>
+    </svg>
+  </button>
+
+  <div class="lang-menu" id="lang-menu" role="menu" hidden>
+    <button class="lang-item" type="button" role="menuitem" data-set-lang="ko">
+      <span class="lang-check" aria-hidden="true">✓</span>
+      <span>한국어</span>
+    </button>
+    <button class="lang-item" type="button" role="menuitem" data-set-lang="en">
+      <span class="lang-check" aria-hidden="true">✓</span>
+      <span>English</span>
+    </button>
+  </div>
+</div>
+
+<script>
+  import '@/scripts/components/lang-switcher';
+</script>
+
+<style>
+  .lang-switcher {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  /* 탭 버튼과 같은 결의 플랫 텍스트 버튼. hover 시만 약하게 강조. */
+  .lang-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.85);
+    padding: 6px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    line-height: 1.4;
+    transition: all 0.15s;
+  }
+  .lang-trigger:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .lang-icon {
+    font-size: 13px;
+    line-height: 1;
+  }
+
+  .lang-current {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+  }
+
+  .lang-caret {
+    color: rgba(255, 255, 255, 0.7);
+  }
+
+  .lang-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    min-width: 140px;
+    background: #2a2f36;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    padding: 6px;
+    display: none;
+    flex-direction: column;
+    gap: 2px;
+    z-index: 200;
+  }
+  .lang-switcher[data-open='true'] .lang-menu {
+    display: flex;
+  }
+
+  .lang-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.85);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    text-align: left;
+    line-height: 1.4;
+  }
+  .lang-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+  }
+
+  .lang-check {
+    width: 14px;
+    color: #818cf8;
+    visibility: hidden;
+  }
+  .lang-item[data-active='true'] .lang-check {
+    visibility: visible;
+  }
+  .lang-item[data-active='true'] {
+    color: #fff;
+  }
+
+  /* 모바일: 헤더에서 숨김 — 햄버거 메뉴 안의 언어 항목 (MobileNav.astro) 으로 이동. */
+  @media (max-width: 768px) {
+    .lang-switcher {
+      display: none;
+    }
+  }
+</style>

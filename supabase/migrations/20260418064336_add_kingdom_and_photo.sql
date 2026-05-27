@@ -1,0 +1,3 @@
+-- API 응답 필드 추가
+ALTER TABLE members ADD COLUMN IF NOT EXISTS kingdom INTEGER;
+ALTER TABLE members ADD COLUMN IF NOT EXISTS profile_photo TEXT;
