@@ -116,7 +116,120 @@
 
 ## 데이터 모델
 
-별도 후속 작업으로 권장 안 제시 예정. 필드별 활용처를 주석 형태로 함께 표기한다.
+### 인증 인프라 (재사용)
+
+기존 `kingshot-1767` 자산을 그대로 사용한다. 신규 인증 테이블은 만들지 않는다.
+
+| 자산 | 역할 |
+|------|------|
+| `members` | 킹샷 ID + 닉네임 + 레벨 + 전투력 + `is_admin` |
+| `member_credentials` | PIN 해시 + salt (RLS 0개 = service_role 전용) |
+| `tile-match-auth` EF | `pin-status` / `set-pin` / `verify-pin` action |
+
+**서버 번호(1767) 검증**: DB 컬럼 X. 가입 시점에 공식 API 응답의 `server_id` 만 확인 (1767 ≠ 거부). 사이트 자체가 1767 전용이라 컬럼으로 박제할 필요 없음.
+
+### 신규 테이블 (prefix `cb_` — castle battle)
+
+| # | 테이블 | 역할 |
+|---|--------|------|
+| 1 | `cb_rounds` | 회차 마스터. 동시 active 1개 보장 |
+| 2 | `cb_targets` | 회차당 5개 거점 (캐슬 + 포탑 11/2/5/7) |
+| 3 | `cb_alliances` | 연맹 마스터 (재사용 가능, 회차마다 재등록 X) |
+| 4 | `cb_candidates` | 회차×거점 집결자 후보 (연맹+닉네임). **1:N** — 같은 연맹의 다른 닉네임 N명 등록 가능 |
+| 5 | `cb_votes` | 사용자 투표. 거점×사용자 = 1 row |
+| 6 | `cb_results` | 회차 종료 후 운영자가 입력한 실제 점령 집결자 |
+| 7 | `cb_admins` | 운영자 화이트리스트 (kingshot_id) |
+
+### 스키마 (요약)
+
+```sql
+-- 1. 회차
+cb_rounds (
+  id, title, event_starts_at, status,
+  status IN ('preparing','voting','voting_closed','results_in','archived'),
+  created_by → members.kingshot_id (FK),
+  voting_opened_at, voting_closed_at, results_entered_at
+)
+-- 동시 active 1개 보장: 부분 unique index on status != 'archived'
+
+-- 2. 거점 (회차당 5개 슬롯 고정)
+cb_targets (
+  id, round_id → cb_rounds (FK CASCADE),
+  slot IN ('castle','turret_11','turret_2','turret_5','turret_7'),
+  is_open BOOL DEFAULT TRUE,  -- false = 자유전투 (베팅 X)
+  UNIQUE (round_id, slot)
+)
+
+-- 3. 연맹 마스터
+cb_alliances (id, tag UNIQUE, name)
+
+-- 4. 집결자 후보 (1:N)
+cb_candidates (
+  id, target_id → cb_targets (FK CASCADE),
+  alliance_id → cb_alliances (FK),
+  rallier_nickname TEXT,        -- 등록 시점 닉네임 스냅샷
+  kingshot_id TEXT,             -- nullable: 외부 연맹 집결자는 1767 멤버 아닐 수 있음 → FK 없음
+  display_order INT,
+  UNIQUE (target_id, alliance_id, rallier_nickname)
+)
+
+-- 5. 사용자 투표
+cb_votes (
+  id, round_id, target_id,
+  candidate_id → cb_candidates (FK),
+  voter_kingshot_id → members.kingshot_id (FK),
+  UNIQUE (target_id, voter_kingshot_id)  -- 거점당 1인 1표
+)
+-- 부분 투표 허용: row 없으면 = 미투표
+
+-- 6. 게임 결과 (운영자 입력)
+cb_results (
+  target_id PK → cb_targets (FK CASCADE),
+  winning_candidate_id → cb_candidates (FK, nullable: 자유전투/결과 없음),
+  entered_by → members.kingshot_id (FK),
+  entered_at
+)
+
+-- 7. 운영자 화이트리스트
+cb_admins (
+  kingshot_id PK → members.kingshot_id (FK),
+  added_by, added_at, memo
+)
+```
+
+### 집계 view
+
+```sql
+CREATE VIEW cb_vote_counts AS
+SELECT
+  c.id AS candidate_id, c.target_id, c.alliance_id, c.rallier_nickname,
+  COUNT(v.id) AS vote_count
+FROM cb_candidates c
+LEFT JOIN cb_votes v ON v.candidate_id = c.id
+GROUP BY c.id, c.target_id, c.alliance_id, c.rallier_nickname;
+```
+
+### RLS 정책 요점
+
+| 테이블 | anon SELECT | anon INSERT/UPDATE |
+|--------|------------|---------|
+| `cb_rounds` | ✓ | ✗ (Edge Function 만) |
+| `cb_targets` | ✓ | ✗ |
+| `cb_alliances` | ✓ | ✗ |
+| `cb_candidates` | ✓ | ✗ |
+| `cb_votes` | ✓ (집계용) | ✗ (PIN 검증 EF 만) |
+| `cb_results` | ✓ (회차 종료 후) | ✗ |
+| `cb_admins` | ✗ (운영자 식별 노출 차단) | ✗ |
+
+투표 INSERT는 **반드시 Edge Function 경유** — `voter_kingshot_id` 위조 방지 위해 PIN 매 호출 검증 또는 단기 토큰.
+
+### 설계 결정 메모
+
+- **닉네임 스냅샷** (`cb_candidates.rallier_nickname`): 회차 후 닉네임이 바뀌어도 결과 보존
+- **부분 unique index** (회차 동시 active 1개): `WHERE status != 'archived'` 조건부 unique
+- **FK CASCADE**: 회차 삭제 시 거점/후보/투표 자동 삭제 (운영자 실수 회복)
+- **FK 없는 컬럼**: `cb_candidates.kingshot_id` 만 — 외부 연맹 집결자 등록 위해 nullable + FK 없음. 매칭되면 멤버 정보 조회 가능, 안 되어도 닉네임만으로 운영
+- **`cb_alliances.tag` UNIQUE**: 같은 약칭 충돌 방지. 이름은 자유
 
 ## 확정 사항 (2026-05-29)
 
