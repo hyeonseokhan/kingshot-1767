@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>캐슬 전투 베팅 — 화면 시안</title>
+<style>
+  :root {
+    --cb-bg: #0b0d12;
+    --cb-bg-gradient: radial-gradient(ellipse at top, #1a1530 0%, #0b0d12 60%);
+    --cb-surface: #14171f;
+    --cb-surface-2: #1c2030;
+    --cb-border: rgba(255, 255, 255, 0.08);
+    --cb-border-strong: rgba(255, 255, 255, 0.16);
+    --cb-text: #f0f2f5;
+    --cb-text-dim: #9aa0ac;
+    --cb-text-faint: rgba(255, 255, 255, 0.42);
+
+    --cb-gold: #f5b942;
+    --cb-gold-soft: #ffd76b;
+    --cb-purple: #8b5cf6;
+    --cb-red: #ef4444;
+    --cb-success: #10b981;
+    --cb-info: #6366f1;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--cb-bg);
+    background-image: var(--cb-bg-gradient);
+    background-attachment: fixed;
+    color: var(--cb-text);
+    font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    min-height: 100vh;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  /* ── Header ───────────────────────────────────── */
+  .cb-header {
+    background: rgba(20, 23, 31, 0.85);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--cb-border);
+    padding: 10px 0;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+  }
+  .cb-header-inner {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 16px;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 16px;
+  }
+  .cb-brand {
+    font-size: 13.5px; font-weight: 700;
+    color: var(--cb-text-dim); letter-spacing: 0.02em;
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .cb-brand-icon { color: var(--cb-gold); font-size: 16px; }
+  .cb-brand strong { color: var(--cb-text); }
+  .cb-header-actions { display: inline-flex; align-items: center; gap: 4px; }
+  .cb-icon-btn {
+    background: none; border: none; color: rgba(255,255,255,0.85);
+    padding: 6px 10px; border-radius: 6px; cursor: pointer;
+    font: inherit; font-size: 12.5px; font-weight: 600;
+    transition: background 0.15s;
+  }
+  .cb-icon-btn:hover { background: rgba(255,255,255,0.06); color: #fff; }
+
+  /* ── 운영자 패널 (최상단) ─────────────────────────── */
+  .cb-admin {
+    max-width: 1100px;
+    margin: 16px auto 0;
+    padding: 0 16px;
+  }
+  .cb-admin-inner {
+    background: var(--cb-surface);
+    border: 1px solid rgba(245, 185, 66, 0.25);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .cb-admin-head {
+    background: rgba(245, 185, 66, 0.05);
+    padding: 12px 16px;
+    border-bottom: 1px solid rgba(245, 185, 66, 0.15);
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13px; font-weight: 700;
+    color: var(--cb-gold);
+  }
+  .cb-admin-body { padding: 14px 16px; }
+  .cb-admin-row {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+    padding: 10px 0;
+    border-bottom: 1px dashed var(--cb-border);
+  }
+  .cb-admin-row:last-child { border-bottom: none; }
+  .cb-admin-label {
+    font-size: 12px; font-weight: 600;
+    color: var(--cb-text-dim);
+    min-width: 100px;
+  }
+  .cb-btn {
+    background: var(--cb-gold);
+    color: #1a1500;
+    border: none;
+    padding: 7px 14px;
+    border-radius: 6px;
+    font: inherit; font-size: 12.5px; font-weight: 700;
+    cursor: pointer;
+    transition: filter 0.12s;
+  }
+  .cb-btn:hover { filter: brightness(1.1); }
+  .cb-btn-secondary {
+    background: rgba(255,255,255,0.06);
+    color: var(--cb-text);
+    border: 1px solid var(--cb-border-strong);
+  }
+  .cb-btn-sm { padding: 4px 10px; font-size: 11.5px; }
+
+  /* ── 영웅 영역 ─────────────────────────── */
+  .cb-hero {
+    max-width: 1100px;
+    margin: 24px auto 0;
+    padding: 0 16px;
+    text-align: center;
+  }
+  .cb-hero-eyebrow {
+    font-size: 11.5px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--cb-gold); font-weight: 700; margin-bottom: 6px;
+  }
+  .cb-hero-title {
+    font-size: 26px; font-weight: 800;
+    letter-spacing: -0.02em; color: var(--cb-text);
+    margin-bottom: 8px;
+    text-shadow: 0 2px 10px rgba(245, 185, 66, 0.15);
+  }
+  .cb-hero-meta {
+    display: inline-flex; align-items: center; gap: 14px;
+    color: var(--cb-text-dim); font-size: 13px;
+    flex-wrap: wrap; justify-content: center;
+  }
+  .cb-hero-meta-item { display: inline-flex; align-items: center; gap: 4px; }
+  .cb-hero-meta-dot { width: 3px; height: 3px; border-radius: 50%; background: var(--cb-border-strong); }
+  .cb-status-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 14px; border-radius: 999px;
+    font-size: 12px; font-weight: 700;
+    letter-spacing: 0.04em; text-transform: uppercase;
+    margin-top: 12px;
+  }
+  .cb-status-badge::before {
+    content: ''; width: 6px; height: 6px; border-radius: 50%;
+    box-shadow: 0 0 8px currentColor;
+  }
+  .cb-status-voting {
+    background: rgba(16, 185, 129, 0.12);
+    color: var(--cb-success);
+    border: 1px solid rgba(16, 185, 129, 0.25);
+  }
+  .cb-status-voting::before { background: var(--cb-success); animation: cb-pulse 1.8s ease-in-out infinite; }
+  @keyframes cb-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%      { opacity: 0.5; transform: scale(1.4); }
+  }
+
+  /* ── 시계 배치 전장 맵 ─────────────────────── */
+  .cb-battlefield {
+    max-width: 1100px;
+    margin: 28px auto 40px;
+    padding: 0 16px;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-rows: auto auto auto;
+    gap: 16px;
+    grid-template-areas:
+      ". north ."
+      "west castle east"
+      ". south .";
+  }
+  .cb-battlefield .cb-target[data-slot="castle"]    { grid-area: castle; }
+  .cb-battlefield .cb-target[data-slot="turret_12"] { grid-area: north; }
+  .cb-battlefield .cb-target[data-slot="turret_3"]  { grid-area: east; }
+  .cb-battlefield .cb-target[data-slot="turret_6"]  { grid-area: south; }
+  .cb-battlefield .cb-target[data-slot="turret_9"]  { grid-area: west; }
+
+  .cb-target {
+    position: relative;
+    border-radius: 14px;
+    overflow: hidden;
+    background: var(--cb-surface);
+    border: 1px solid var(--cb-border);
+    aspect-ratio: 4 / 3;
+    cursor: pointer;
+    transition: transform 0.18s, border-color 0.18s, box-shadow 0.18s;
+  }
+  .cb-target:hover {
+    transform: translateY(-2px);
+    border-color: var(--cb-gold-soft);
+    box-shadow: 0 10px 30px rgba(245, 185, 66, 0.15);
+  }
+  .cb-battlefield .cb-target[data-slot="castle"] {
+    aspect-ratio: 1 / 1;
+    border-color: rgba(245, 185, 66, 0.3);
+    box-shadow: 0 4px 30px rgba(245, 185, 66, 0.08);
+  }
+  .cb-battlefield .cb-target[data-slot="castle"]:hover {
+    box-shadow: 0 10px 40px rgba(245, 185, 66, 0.25);
+  }
+  .cb-target.is-free {
+    filter: grayscale(0.7);
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+  .cb-target.is-free:hover {
+    transform: none;
+    border-color: var(--cb-border);
+    box-shadow: none;
+  }
+
+  /* ── 거점 카드 내부 ─────────────────── */
+  .cb-target-img {
+    position: absolute; inset: 0;
+    background-position: center;
+    background-size: cover;
+    background-repeat: no-repeat;
+    transition: transform 0.4s;
+  }
+  .cb-target:hover .cb-target-img { transform: scale(1.05); }
+  .cb-target-overlay {
+    position: absolute; inset: 0;
+    background: linear-gradient(180deg,
+      rgba(11, 13, 18, 0.15) 0%,
+      rgba(11, 13, 18, 0.35) 40%,
+      rgba(11, 13, 18, 0.92) 100%);
+  }
+  .cb-target-label {
+    position: absolute;
+    top: 10px; left: 10px; right: 10px;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 6px; z-index: 2;
+  }
+  .cb-target-name {
+    font-size: 13px;
+    font-weight: 800;
+    color: #fff;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7);
+    letter-spacing: 0.02em;
+  }
+  .cb-target[data-slot="castle"] .cb-target-name {
+    font-size: 17px;
+    color: var(--cb-gold-soft);
+  }
+  .cb-target-tag {
+    font-size: 9.5px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 999px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    background: rgba(0,0,0,0.5);
+    backdrop-filter: blur(6px);
+    color: var(--cb-text-dim);
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+  .cb-target-tag.tag-free {
+    color: var(--cb-gold);
+    border-color: rgba(245, 185, 66, 0.4);
+    background: rgba(245, 185, 66, 0.12);
+  }
+  .cb-target-tag.tag-voted {
+    color: var(--cb-info);
+    border-color: rgba(99, 102, 241, 0.5);
+    background: rgba(99, 102, 241, 0.15);
+  }
+
+  /* 1위 표시 (중앙) */
+  .cb-target-leader {
+    position: absolute;
+    left: 50%; top: 50%;
+    transform: translate(-50%, -55%);
+    z-index: 2;
+    text-align: center;
+    pointer-events: none;
+  }
+  .cb-leader-alliance {
+    display: inline-block;
+    font-size: 10.5px; font-weight: 800;
+    color: var(--cb-gold-soft);
+    background: rgba(0,0,0,0.6);
+    padding: 2px 8px;
+    border-radius: 4px;
+    letter-spacing: 0.06em;
+    margin-bottom: 3px;
+    backdrop-filter: blur(4px);
+  }
+  .cb-leader-name {
+    font-size: 15px; font-weight: 800;
+    color: #fff;
+    text-shadow: 0 2px 12px rgba(0,0,0,0.9);
+    letter-spacing: -0.01em;
+  }
+  .cb-target[data-slot="castle"] .cb-leader-name { font-size: 19px; }
+  .cb-leader-count {
+    font-size: 10px;
+    color: rgba(255,255,255,0.7);
+    margin-top: 3px;
+    letter-spacing: 0.06em;
+  }
+
+  /* 자유전투 */
+  .cb-free-text {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column;
+    color: var(--cb-gold);
+    font-size: 12px; font-weight: 700;
+    letter-spacing: 0.1em;
+    z-index: 2;
+  }
+  .cb-free-text-sub {
+    font-size: 9.5px;
+    color: var(--cb-text-dim);
+    margin-top: 4px;
+    letter-spacing: 0.04em;
+    font-weight: 500;
+  }
+
+  /* 하단 후보 미리보기 */
+  .cb-target-footer {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    padding: 8px 10px 10px;
+    z-index: 2;
+  }
+  .cb-cand-row {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    margin-bottom: 3px;
+  }
+  .cb-cand-row:last-of-type { margin-bottom: 0; }
+  .cb-cand-row-name {
+    color: #fff; font-weight: 600;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+  }
+  .cb-cand-row-tag {
+    display: inline-block;
+    font-size: 9px; font-weight: 800;
+    color: var(--cb-gold-soft);
+    background: rgba(0,0,0,0.5);
+    padding: 1px 5px;
+    border-radius: 3px;
+    letter-spacing: 0.06em;
+  }
+  .cb-cand-row-pct {
+    font-size: 10.5px;
+    color: rgba(255,255,255,0.85);
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+  }
+  .cb-cand-row-bar {
+    grid-column: 1 / -1;
+    height: 2px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.12);
+    overflow: hidden;
+    margin-top: 2px;
+  }
+  .cb-cand-row-bar > div {
+    height: 100%;
+    background: linear-gradient(90deg, var(--cb-gold), var(--cb-gold-soft));
+    border-radius: 999px;
+  }
+  .cb-cand-row.is-voted .cb-cand-row-bar > div {
+    background: linear-gradient(90deg, var(--cb-info), #a5a8f7);
+  }
+  .cb-cand-row.is-winner .cb-cand-row-bar > div {
+    background: linear-gradient(90deg, var(--cb-success), #34d399);
+  }
+
+  /* 반응형 */
+  @media (max-width: 700px) {
+    .cb-battlefield {
+      grid-template-columns: 1fr 1fr;
+      grid-template-areas:
+        "castle castle"
+        "north east"
+        "south west";
+    }
+    .cb-battlefield .cb-target { aspect-ratio: 1 / 1; }
+    .cb-battlefield .cb-target[data-slot="castle"] { aspect-ratio: 16 / 10; }
+    .cb-hero-title { font-size: 22px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════ Header ═══════════════ -->
+<header class="cb-header">
+  <div class="cb-header-inner">
+    <div class="cb-brand">
+      <span class="cb-brand-icon">⚔</span>
+      <span><strong>1767</strong> · 캐슬 전투 베팅</span>
+    </div>
+    <div class="cb-header-actions">
+      <button class="cb-icon-btn">PNX리더</button>
+      <button class="cb-icon-btn">로그아웃</button>
+      <button class="cb-icon-btn">🌐 KOR</button>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════════ 운영자 패널 (최상단) ═══════════════ -->
+<section class="cb-admin">
+  <div class="cb-admin-inner">
+    <div class="cb-admin-head">🛠️ 운영자 패널</div>
+    <div class="cb-admin-body">
+      <div class="cb-admin-row">
+        <span class="cb-admin-label">회차 상태</span>
+        <button class="cb-btn cb-btn-sm">투표 마감</button>
+        <button class="cb-btn cb-btn-secondary cb-btn-sm" disabled style="opacity:0.4">결과 입력 단계로</button>
+      </div>
+      <div class="cb-admin-row">
+        <span class="cb-admin-label">집결자 등록</span>
+        <button class="cb-btn cb-btn-sm">+ 후보 추가</button>
+        <button class="cb-btn cb-btn-secondary cb-btn-sm">연맹 관리</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ 영웅 헤더 ═══════════════ -->
+<section class="cb-hero">
+  <div class="cb-hero-eyebrow">— Round 7 —</div>
+  <h1 class="cb-hero-title">2026-05-31 캐슬 전투</h1>
+  <div class="cb-hero-meta">
+    <span class="cb-hero-meta-item">📅 5월 31일(토) 20:00</span>
+    <span class="cb-hero-meta-dot"></span>
+    <span class="cb-hero-meta-item">👥 124명 참여</span>
+    <span class="cb-hero-meta-dot"></span>
+    <span class="cb-hero-meta-item">⏱ 마감까지 02:14:32</span>
+  </div>
+  <div><span class="cb-status-badge cb-status-voting">투표 진행 중</span></div>
+</section>
+
+<!-- ═══════════════ 시계 배치 ═══════════════ -->
+<section class="cb-battlefield">
+
+  <article class="cb-target is-free" data-slot="turret_12">
+    <div class="cb-target-img" style="background-image:url('포탑.png')"></div>
+    <div class="cb-target-overlay"></div>
+    <div class="cb-target-label">
+      <span class="cb-target-name">북쪽 포탑</span>
+      <span class="cb-target-tag tag-free">자유전투</span>
+    </div>
+    <div class="cb-free-text">베팅 비대상<span class="cb-free-text-sub">FREE BATTLE</span></div>
+  </article>
+
+  <article class="cb-target" data-slot="turret_9">
+    <div class="cb-target-img" style="background-image:url('포탑.png')"></div>
+    <div class="cb-target-overlay"></div>
+    <div class="cb-target-label">
+      <span class="cb-target-name">서쪽 포탑</span>
+      <span class="cb-target-tag">진행 중</span>
+    </div>
+    <div class="cb-target-leader">
+      <span class="cb-leader-alliance">LIN</span>
+      <div class="cb-leader-name">오공</div>
+      <div class="cb-leader-count">19표 · 50%</div>
+    </div>
+    <div class="cb-target-footer">
+      <div class="cb-cand-row">
+        <span class="cb-cand-row-tag">LIN</span><span class="cb-cand-row-name">오공</span><span class="cb-cand-row-pct">50%</span>
+        <div class="cb-cand-row-bar"><div style="width:50%"></div></div>
+      </div>
+      <div class="cb-cand-row">
+        <span class="cb-cand-row-tag">VKG</span><span class="cb-cand-row-name">아쟈</span><span class="cb-cand-row-pct">50%</span>
+        <div class="cb-cand-row-bar"><div style="width:50%"></div></div>
+      </div>
+    </div>
+  </article>
+
+  <article class="cb-target" data-slot="castle">
+    <div class="cb-target-img" style="background-image:url('캐슬.png')"></div>
+    <div class="cb-target-overlay"></div>
+    <div class="cb-target-label">
+      <span class="cb-target-name">캐슬</span>
+      <span class="cb-target-tag tag-voted">✓ 투표함</span>
+    </div>
+    <div class="cb-target-leader">
+      <span class="cb-leader-alliance">PNX</span>
+      <div class="cb-leader-name">렐라</div>
+      <div class="cb-leader-count">42표 · 52%</div>
+    </div>
+    <div class="cb-target-footer">
+      <div class="cb-cand-row is-voted">
+        <span class="cb-cand-row-tag">PNX</span><span class="cb-cand-row-name">렐라</span><span class="cb-cand-row-pct">52%</span>
+        <div class="cb-cand-row-bar"><div style="width:52%"></div></div>
+      </div>
+      <div class="cb-cand-row">
+        <span class="cb-cand-row-tag">LIN</span><span class="cb-cand-row-name">오공</span><span class="cb-cand-row-pct">35%</span>
+        <div class="cb-cand-row-bar"><div style="width:35%"></div></div>
+      </div>
+      <div class="cb-cand-row">
+        <span class="cb-cand-row-tag">DRG</span><span class="cb-cand-row-name">파이로</span><span class="cb-cand-row-pct">13%</span>
+        <div class="cb-cand-row-bar"><div style="width:13%"></div></div>
+      </div>
+    </div>
+  </article>
+
+  <article class="cb-target" data-slot="turret_3">
+    <div class="cb-target-img" style="background-image:url('포탑.png')"></div>
+    <div class="cb-target-overlay"></div>
+    <div class="cb-target-label">
+      <span class="cb-target-name">동쪽 포탑</span>
+      <span class="cb-target-tag">진행 중</span>
+    </div>
+    <div class="cb-target-leader">
+      <span class="cb-leader-alliance">PNX</span>
+      <div class="cb-leader-name">렐라</div>
+      <div class="cb-leader-count">34표 · 44%</div>
+    </div>
+    <div class="cb-target-footer">
+      <div class="cb-cand-row">
+        <span class="cb-cand-row-tag">PNX</span><span class="cb-cand-row-name">렐라</span><span class="cb-cand-row-pct">44%</span>
+        <div class="cb-cand-row-bar"><div style="width:44%"></div></div>
+      </div>
+      <div class="cb-cand-row">
+        <span class="cb-cand-row-tag">PNX</span><span class="cb-cand-row-name">이수</span><span class="cb-cand-row-pct">28%</span>
+        <div class="cb-cand-row-bar"><div style="width:28%"></div></div>
+      </div>
+      <div class="cb-cand-row">
+        <span class="cb-cand-row-tag">LIN</span><span class="cb-cand-row-name">시즈</span><span class="cb-cand-row-pct">28%</span>
+        <div class="cb-cand-row-bar"><div style="width:28%"></div></div>
+      </div>
+    </div>
+  </article>
+
+  <article class="cb-target" data-slot="turret_6">
+    <div class="cb-target-img" style="background-image:url('포탑.png')"></div>
+    <div class="cb-target-overlay"></div>
+    <div class="cb-target-label">
+      <span class="cb-target-name">남쪽 포탑</span>
+      <span class="cb-target-tag tag-voted">✓ 투표함</span>
+    </div>
+    <div class="cb-target-leader">
+      <span class="cb-leader-alliance">DRG</span>
+      <div class="cb-leader-name">파이로</div>
+      <div class="cb-leader-count">38표 · 61%</div>
+    </div>
+    <div class="cb-target-footer">
+      <div class="cb-cand-row is-voted">
+        <span class="cb-cand-row-tag">DRG</span><span class="cb-cand-row-name">파이로</span><span class="cb-cand-row-pct">61%</span>
+        <div class="cb-cand-row-bar"><div style="width:61%"></div></div>
+      </div>
+      <div class="cb-cand-row">
+        <span class="cb-cand-row-tag">VKG</span><span class="cb-cand-row-name">토르</span><span class="cb-cand-row-pct">39%</span>
+        <div class="cb-cand-row-bar"><div style="width:39%"></div></div>
+      </div>
+    </div>
+  </article>
+
+</section>
+
+</body>
+</html>
