@@ -1,0 +1,73 @@
+---
+// 캐슬 전투 페이지 — 정적 시안 단계 (mockup 그대로 포팅).
+// _battlefield.html / _dialog.html: 메인 마크업 (mockup 에서 추출, 이미지 경로만 /castle-battle/ 로 재작성).
+// 후속: Supabase 연동 (cb_rounds / cb_targets / cb_candidates / cb_votes + castle-battle EF).
+import CastleBattleLayout from '@/layouts/CastleBattleLayout.astro';
+import battlefieldHtml from './_battlefield.html?raw';
+import dialogHtml from './_dialog.html?raw';
+import '@/styles/castle-battle.css';
+---
+
+<CastleBattleLayout
+  title="캐슬 전투 — 1767 서버 허브"
+  description="캐슬 전투 회차별 거점 점령 집결자 예측 투표"
+>
+  {/* 운영자 popover — 페이지 우상단 floating (통합 헤더 아래). */}
+  <div class="cb-page-toolbar">
+    <details class="cb-admin-pop">
+      <summary>🛠 운영자</summary>
+      <div class="cb-admin-pop-panel">
+        <div class="cb-admin-pop-head">🛠️ 운영자 패널</div>
+        <div class="cb-admin-pop-body">
+          <div class="cb-admin-group">
+            <div class="cb-admin-group-label">회차 상태</div>
+            <div class="cb-admin-group-actions">
+              <button class="cb-btn cb-btn-sm">투표 마감</button>
+              <button class="cb-btn cb-btn-secondary cb-btn-sm" disabled style="opacity:0.4"
+                >결과 입력 단계로</button
+              >
+            </div>
+          </div>
+          <div class="cb-admin-group">
+            <div class="cb-admin-group-label">집결자 등록</div>
+            <div class="cb-admin-group-actions">
+              <button class="cb-btn cb-btn-sm">+ 후보 추가</button>
+              <button class="cb-btn cb-btn-secondary cb-btn-sm">연맹 관리</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </details>
+  </div>
+
+  <section class="cb-hero">
+    <div class="cb-hero-eyebrow">— Round 7 —</div>
+    <h1 class="cb-hero-title">2026-05-31 캐슬 전투</h1>
+    <div class="cb-hero-meta">
+      <span class="cb-hero-meta-item">📅 5월 31일(토) 20:00</span>
+      <span class="cb-hero-meta-dot"></span>
+      <span class="cb-hero-meta-item">👥 124명 참여</span>
+      <span class="cb-hero-meta-dot"></span>
+      <span class="cb-hero-meta-item">⏱ 마감까지 02:14:32</span>
+    </div>
+    <div><span class="cb-status-badge cb-status-voting">투표 진행 중</span></div>
+  </section>
+
+  <Fragment set:html={battlefieldHtml} />
+  <Fragment set:html={dialogHtml} />
+
+  <script>
+    import '@/scripts/pages/castle-battle';
+  </script>
+</CastleBattleLayout>
+
+<style is:global>
+  /* 운영자 popover floating 위치 — 페이지 우상단. cb-admin-pop 자체 룰은 castle-battle.css 가 처리. */
+  .cb-page-toolbar {
+    max-width: 1400px;
+    margin: 0 auto 8px;
+    padding: 0 4px;
+    display: flex;
+    justify-content: flex-end;
+  }
+</style>

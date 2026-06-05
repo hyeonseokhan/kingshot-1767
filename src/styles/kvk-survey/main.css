@@ -1,17 +1,18 @@
 /* survey.kingshot.wooju-home.org/kvk 페이지 전용 스타일 (sk- prefix). */
 
 :root {
-  --sk-bg: #0f1115;
-  --sk-surface: #1a1d24;
-  --sk-surface-2: #232732;
-  --sk-border: rgba(255, 255, 255, 0.08);
-  --sk-border-strong: rgba(255, 255, 255, 0.16);
-  --sk-text: #e8eaef;
-  --sk-text-dim: #9aa0ac;
-  --sk-accent: #6366f1;
-  --sk-accent-hover: #7c83f4;
-  --sk-success: #10b981;
-  --sk-danger: #ef4444;
+  /* 통합 브랜드 팔레트(global.css) 참조 — 모든 sk-* 룰은 자동으로 violet+light 따라옴. */
+  --sk-bg: var(--brand-bg);
+  --sk-surface: var(--brand-surface);
+  --sk-surface-2: var(--brand-surface-2);
+  --sk-border: var(--brand-border);
+  --sk-border-strong: var(--brand-border-strong);
+  --sk-text: var(--brand-text);
+  --sk-text-dim: var(--brand-text-dim);
+  --sk-accent: var(--brand-accent);
+  --sk-accent-hover: var(--brand-accent-soft);
+  --sk-success: var(--brand-success);
+  --sk-danger: var(--brand-danger);
 }
 
 .survey-body {

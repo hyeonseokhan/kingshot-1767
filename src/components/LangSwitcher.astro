@@ -53,26 +53,32 @@
     align-items: center;
   }
 
-  /* 탭 버튼과 같은 결의 플랫 텍스트 버튼. hover 시만 약하게 강조. */
+  /* light 헤더 위에 또렷이 보이도록 brand 토큰 사용 — dark 잔재 제거. */
   .lang-trigger {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    background: none;
-    border: none;
-    color: rgba(255, 255, 255, 0.85);
-    padding: 6px 8px;
+    background: rgba(15, 23, 42, 0.04);
+    border: 1px solid var(--brand-border);
+    color: var(--brand-text);
+    padding: 5px 10px;
     border-radius: 6px;
     cursor: pointer;
     font-family: inherit;
     font-size: 12.5px;
     font-weight: 600;
     line-height: 1.4;
-    transition: all 0.15s;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
   }
   .lang-trigger:hover {
-    color: #fff;
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(124, 58, 237, 0.10);
+    border-color: rgba(124, 58, 237, 0.35);
+    color: var(--brand-accent);
+  }
+  .lang-switcher[data-open='true'] .lang-trigger {
+    background: rgba(124, 58, 237, 0.14);
+    border-color: rgba(124, 58, 237, 0.45);
+    color: var(--brand-accent);
   }
 
   .lang-icon {
@@ -86,7 +92,8 @@
   }
 
   .lang-caret {
-    color: rgba(255, 255, 255, 0.7);
+    color: currentColor;
+    opacity: 0.65;
   }
 
   .lang-menu {
@@ -94,10 +101,10 @@
     top: calc(100% + 6px);
     right: 0;
     min-width: 140px;
-    background: #2a2f36;
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: var(--brand-surface);
+    border: 1px solid var(--brand-border);
     border-radius: 10px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
     padding: 6px;
     display: none;
     flex-direction: column;
@@ -114,7 +121,7 @@
     gap: 8px;
     background: none;
     border: none;
-    color: rgba(255, 255, 255, 0.85);
+    color: var(--brand-text);
     padding: 6px 10px;
     border-radius: 6px;
     font-family: inherit;
@@ -123,28 +130,25 @@
     cursor: pointer;
     text-align: left;
     line-height: 1.4;
+    transition: background 0.12s, color 0.12s;
   }
   .lang-item:hover {
-    background: rgba(255, 255, 255, 0.08);
-    color: #fff;
+    background: rgba(124, 58, 237, 0.08);
+    color: var(--brand-accent);
   }
 
   .lang-check {
     width: 14px;
-    color: #818cf8;
+    color: var(--brand-accent);
     visibility: hidden;
   }
   .lang-item[data-active='true'] .lang-check {
     visibility: visible;
   }
   .lang-item[data-active='true'] {
-    color: #fff;
+    color: var(--brand-accent);
+    font-weight: 700;
   }
 
-  /* 모바일: 헤더에서 숨김 — 햄버거 메뉴 안의 언어 항목 (MobileNav.astro) 으로 이동. */
-  @media (max-width: 768px) {
-    .lang-switcher {
-      display: none;
-    }
-  }
+  /* 1767 사이트는 MobileNav 가 없음 — 모바일에서도 헤더에 LangSwitcher 노출. */
 </style>

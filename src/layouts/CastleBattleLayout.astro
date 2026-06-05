@@ -1,0 +1,33 @@
+---
+// CastleBattleLayout — 캐슬 전투 투표 페이지 전용.
+// BaseLayout(통합 헤더) 위에 캐슬 콘텐츠에 맞는 wide main 영역 (~1400px).
+// KvK 의 narrow 모드와 달리 5컬럼 그리드 표시를 위해 폭을 넓게 가져간다.
+import BaseLayout from '@/layouts/BaseLayout.astro';
+
+interface Props {
+  title?: string;
+  description?: string;
+}
+
+const {
+  title = '캐슬 전투 베팅 — 1767 서버 허브',
+  description = '캐슬 전투 회차별 거점 점령 집결자 예측 투표',
+} = Astro.props;
+---
+
+<BaseLayout title={title} description={description} mainClass="castle-main">
+  <slot />
+</BaseLayout>
+
+<style is:global>
+  /* castle-main — 5컬럼 카드 그리드에 맞춰 넓게. */
+  .castle-main {
+    max-width: 1400px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 16px;
+  }
+  @media (max-width: 600px) {
+    .castle-main { padding: 10px; }
+  }
+</style>

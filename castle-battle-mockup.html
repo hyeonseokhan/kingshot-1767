@@ -818,6 +818,84 @@
     .cb-dialog-hero { height: 150px; }
   }
 
+  /* ══════════ 캐슬 1위 포트레이트 (이미지 중앙 오버레이) ══════════ */
+  .cb-leader-portrait {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -58%);
+    z-index: 1;
+    display: flex; flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    pointer-events: none;
+  }
+  .cb-leader-portrait-img {
+    width: 68px; height: 68px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #c4b5fd 0%, #7c3aed 100%);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 30px; font-weight: 800;
+    color: white;
+    border: 2px solid rgba(255, 255, 255, 0.88);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.55);
+    letter-spacing: -0.02em;
+  }
+  .cb-leader-portrait-info {
+    display: flex; flex-direction: column;
+    align-items: center; gap: 3px;
+  }
+  .cb-leader-portrait-name {
+    font-size: 15px; font-weight: 800;
+    color: #fff;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.85);
+    letter-spacing: -0.01em;
+  }
+  .cb-leader-portrait-stats {
+    display: inline-flex; align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.94);
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
+  }
+  .cb-leader-portrait-tag {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: rgba(196, 181, 253, 0.22);
+    border: 1px solid rgba(196, 181, 253, 0.50);
+    font-size: 9.5px; font-weight: 800;
+    letter-spacing: 0.06em;
+    color: #f5d0fe;
+  }
+  .cb-leader-portrait-votes {
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+  }
+  /* 정보 중복 제거 — 모든 투표 진행 거점이 이미지 위 portrait 만 사용, 아래 leader-row 숨김 */
+  .cb-target:not(.is-free) .cb-leader-row { display: none; }
+
+  /* 포탑은 캐슬보다 ~15% 작게 — 시각 위계 + 캐슬 강조 */
+  .cb-target:not([data-slot="castle"]) .cb-leader-portrait {
+    transform: translate(-50%, -64%);
+    gap: 6px;
+  }
+  .cb-target:not([data-slot="castle"]) .cb-leader-portrait-img {
+    width: 58px; height: 58px;
+    border-radius: 10px;
+    font-size: 26px;
+    border-width: 1.5px;
+  }
+  .cb-target:not([data-slot="castle"]) .cb-leader-portrait-name {
+    font-size: 13px;
+  }
+  .cb-target:not([data-slot="castle"]) .cb-leader-portrait-stats {
+    font-size: 10px;
+  }
+  .cb-target:not([data-slot="castle"]) .cb-leader-portrait-tag {
+    font-size: 9px;
+    padding: 1px 5px;
+  }
+
   /* === 반응형 === */
   /* 태블릿: 가로 스크롤로 5장 유지 (캐슬 폭 비율 유지) */
   @media (max-width: 900px) {
@@ -914,6 +992,16 @@
     <div class="cb-target-img-wrap">
       <div class="cb-target-img" style="background-image:url('포탑.png')"></div>
       <div class="cb-target-img-overlay"></div>
+      <div class="cb-leader-portrait">
+        <div class="cb-leader-portrait-img">오</div>
+        <div class="cb-leader-portrait-info">
+          <div class="cb-leader-portrait-name">오공</div>
+          <div class="cb-leader-portrait-stats">
+            <span class="cb-leader-portrait-tag">LIN</span>
+            <span class="cb-leader-portrait-votes">19표 · 50%</span>
+          </div>
+        </div>
+      </div>
       <div class="cb-target-label">
         <div class="cb-target-label-main">
           <svg class="cb-compass" viewBox="0 0 24 24" aria-hidden="true">
@@ -983,6 +1071,16 @@
     <div class="cb-target-img-wrap">
       <div class="cb-target-img" style="background-image:url('캐슬.png')"></div>
       <div class="cb-target-img-overlay"></div>
+      <div class="cb-leader-portrait">
+        <div class="cb-leader-portrait-img">렐</div>
+        <div class="cb-leader-portrait-info">
+          <div class="cb-leader-portrait-name">렐라</div>
+          <div class="cb-leader-portrait-stats">
+            <span class="cb-leader-portrait-tag">PNX</span>
+            <span class="cb-leader-portrait-votes">42표 · 38%</span>
+          </div>
+        </div>
+      </div>
       <div class="cb-target-label">
         <div class="cb-target-label-main">
           <svg class="cb-compass" viewBox="0 0 24 24" aria-hidden="true">
@@ -1051,6 +1149,16 @@
     <div class="cb-target-img-wrap">
       <div class="cb-target-img" style="background-image:url('포탑.png')"></div>
       <div class="cb-target-img-overlay"></div>
+      <div class="cb-leader-portrait">
+        <div class="cb-leader-portrait-img">렐</div>
+        <div class="cb-leader-portrait-info">
+          <div class="cb-leader-portrait-name">렐라</div>
+          <div class="cb-leader-portrait-stats">
+            <span class="cb-leader-portrait-tag">PNX</span>
+            <span class="cb-leader-portrait-votes">34표 · 44%</span>
+          </div>
+        </div>
+      </div>
       <div class="cb-target-label">
         <div class="cb-target-label-main">
           <svg class="cb-compass" viewBox="0 0 24 24" aria-hidden="true">
@@ -1100,6 +1208,16 @@
     <div class="cb-target-img-wrap">
       <div class="cb-target-img" style="background-image:url('포탑.png')"></div>
       <div class="cb-target-img-overlay"></div>
+      <div class="cb-leader-portrait">
+        <div class="cb-leader-portrait-img">파</div>
+        <div class="cb-leader-portrait-info">
+          <div class="cb-leader-portrait-name">파이로</div>
+          <div class="cb-leader-portrait-stats">
+            <span class="cb-leader-portrait-tag">DRG</span>
+            <span class="cb-leader-portrait-votes">38표 · 61%</span>
+          </div>
+        </div>
+      </div>
       <div class="cb-target-label">
         <div class="cb-target-label-main">
           <svg class="cb-compass" viewBox="0 0 24 24" aria-hidden="true">

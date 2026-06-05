@@ -6,29 +6,55 @@
  */
 
 :root {
-  --bg: #ffffff;
-  --bg2: #f6f8fa;
+  /* ═══ 통합 브랜드 팔레트 (1767 사이트 공통 — violet + light) ═══
+     KvK 설문 / 캐슬 전투 두 서비스가 동일 토큰을 참조한다.
+     서비스별 prefix (--sk-* / --cb-*) 는 해당 CSS 에서 alias 로 매핑. */
+  --brand-bg: #f6f8fc;
+  --brand-bg-gradient: radial-gradient(ellipse at top, #ede9fe 0%, #f6f8fc 65%);
+  --brand-surface: #ffffff;
+  --brand-surface-2: #f8fafc;
+  --brand-border: rgba(15, 23, 42, 0.10);
+  --brand-border-strong: rgba(15, 23, 42, 0.20);
+  --brand-text: #0f172a;
+  --brand-text-dim: #64748b;
+  --brand-text-faint: rgba(15, 23, 42, 0.42);
+
+  /* 액센트: violet 3-tier (다크 오버레이 위는 --brand-accent-bright) */
+  --brand-accent: #7c3aed;
+  --brand-accent-soft: #8b5cf6;
+  --brand-accent-bright: #c4b5fd;
+
+  --brand-success: #059669;
+  --brand-danger: #dc2626;
+  --brand-warning: #d97706;
+  --brand-info: #0e7490;
+
+  /* 통합 헤더 높이 (KvK / 캐슬 공용) */
+  --header-h: 52px;
+
+  /* ── 레거시 GitHub 스타일 토큰 — 일부 컴포넌트가 참조 중. brand 토큰으로 점진 이관. ── */
+  --bg: var(--brand-bg);
+  --bg2: var(--brand-surface-2);
   --bg3: #f0f2f5;
-  --bg-header: #1b1f23;
-  --text: #1f2328;
-  --text2: #656d76;
+  --bg-header: var(--brand-surface);
+  --text: var(--brand-text);
+  --text2: var(--brand-text-dim);
   --text3: #8b949e;
   --border: #d1d9e0;
   --border2: #e8ecf0;
-  --accent: #0969da;
-  --accent-bg: #ddf4ff;
-  --accent-light: #54aeff;
-  --green: #1a7f37;
+  --accent: var(--brand-accent);
+  --accent-bg: #ede9fe;
+  --accent-light: var(--brand-accent-soft);
+  --green: var(--brand-success);
   --green-bg: #dafbe1;
-  --amber: #9a6700;
+  --amber: var(--brand-warning);
   --amber-bg: #fff8c5;
-  --red: #cf222e;
-  --purple: #8250df;
-  --purple-bg: #fbefff;
+  --red: var(--brand-danger);
+  --purple: var(--brand-accent);
+  --purple-bg: #ede9fe;
 
   --left-w: 20%;
   --right-w: 20%;
-  --header-h: 52px;
 
   --font: "Pretendard Variable", "Pretendard", -apple-system, BlinkMacSystemFont,
     "Segoe UI", Roboto, sans-serif;

@@ -1,10 +1,8 @@
 ---
-// SurveyLayout — 외부 도메인 (survey.kingshot.wooju-home.org) 용 미니멀 레이아웃.
-// PNX 사이트의 Header/MobileNav/LeftNav/AuthDialog 일체 미포함 (외부 유저 노출 차단).
-// 공통 i18n boot + LangSwitcher 만 유지.
-import '@/styles/global.css';
-import '@/styles/components.css';
-import LangSwitcher from '@/components/LangSwitcher.astro';
+// SurveyLayout — KvK 설문 페이지 전용.
+// BaseLayout(통합 헤더) 위에 KvK 콘텐츠에 맞는 narrow main 영역 + footer 를 얹는다.
+// 로그아웃 버튼은 헤더의 header-actions slot 으로 이전 (survey-kvk.ts 가 그대로 토글).
+import BaseLayout from '@/layouts/BaseLayout.astro';
 
 interface Props {
   title?: string;
@@ -15,80 +13,67 @@ const { title = 'KVK Speed-up Survey', description = 'KVK speed-up inventory sur
   Astro.props;
 ---
 
-<!doctype html>
-<html lang="ko">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>{title}</title>
-    <meta name="description" content={description} />
-    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
-    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
-    <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96.png" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
-    <link
-      rel="stylesheet"
-      href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css"
-    />
-    <script>
-      import { bootI18n } from '@/i18n';
-      bootI18n();
+<BaseLayout title={title} description={description} mainClass="survey-main">
+  <button
+    slot="header-actions"
+    id="sk-logout-btn"
+    class="survey-logout-btn"
+    type="button"
+    hidden
+    data-i18n-attr-title="survey.header.logoutTooltip"
+  >
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+      <polyline points="16 17 21 12 16 7"></polyline>
+      <line x1="21" y1="12" x2="9" y2="12"></line>
+    </svg>
+    <span data-i18n="survey.header.logout">로그아웃</span>
+  </button>
 
-      // iOS Safari focus ring 차단 — 터치 환경에선 키보드 내비 없으므로 의미 없음.
-      // CSS (:focus-visible) 만으론 iOS 가 tap 도 :focus-visible 로 매칭하는 비표준 동작 때문에
-      // 일부 케이스 잔존 → click 후 즉시 blur() 로 focus 자체를 떼어내 ring 차단.
-      // 터치 환경 (hover:none, pointer:coarse) 에서만 적용 — 데스크탑 키보드 내비 a11y 보존.
-      if (matchMedia('(hover: none) and (pointer: coarse)').matches) {
-        document.addEventListener('click', (e) => {
-          const btn = (e.target as HTMLElement | null)?.closest('button');
-          if (btn) btn.blur();
-        });
-      }
-    </script>
-  </head>
-  <body class="survey-body">
-    <header class="survey-header">
-      <div class="survey-header-inner">
-        <h1 class="survey-brand" data-i18n="survey.brand">KVK 가속권 현황 조사</h1>
-        <div class="survey-header-actions">
-          <!-- 로그아웃 버튼 — 인증 세션이 있을 때만 노출 (survey-kvk.ts 가 .is-authed 토글). -->
-          <button
-            id="sk-logout-btn"
-            class="survey-logout-btn"
-            type="button"
-            hidden
-            data-i18n-attr-title="survey.header.logoutTooltip"
-          >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-              <polyline points="16 17 21 12 16 7"></polyline>
-              <line x1="21" y1="12" x2="9" y2="12"></line>
-            </svg>
-            <span data-i18n="survey.header.logout">로그아웃</span>
-          </button>
-          <LangSwitcher />
-        </div>
-      </div>
-    </header>
-    <main class="survey-main">
-      <slot />
-    </main>
-    <footer class="survey-footer">
-      <span class="survey-footer-tag" data-i18n="survey.footer"
-        >KVK Speed-up Survey · 익명 조사용 페이지</span
-      >
-      <span class="survey-footer-copy">© 2026 PNX Toycode. All rights reserved.</span>
-    </footer>
-  </body>
-</html>
+  <slot />
+</BaseLayout>
+
+<style is:global>
+  /* survey-main 폭은 KvK 콘텐츠 (PC 세로 모드) 에 맞춰 좁게 — 1100px 캡. */
+  .survey-main {
+    max-width: 1100px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 16px;
+  }
+  @media (max-width: 600px) {
+    .survey-main { padding: 10px; }
+  }
+  /* 헤더 안 로그아웃 버튼 — 인증 후에만 노출 (survey-kvk.ts 가 hidden 토글). */
+  .survey-logout-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 10px;
+    border-radius: 6px;
+    background: rgba(15, 23, 42, 0.05);
+    border: 1px solid var(--brand-border);
+    color: var(--brand-text);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .survey-logout-btn:hover {
+    background: rgba(15, 23, 42, 0.08);
+    border-color: var(--brand-border-strong);
+  }
+
+  /* footer 는 BaseLayout 의 app-footer 가 통합 제공 — survey-footer 룰은 제거. */
+</style>

@@ -20,7 +20,8 @@ export const en: Translations = {
     playerLookupFailed: 'Lookup failed due to a temporary issue. Please try again in a moment.',
   },
   header: {
-    title: 'Alliance Guide',
+    title: '1767 Server',
+    // PNX legacy keys (unused in 1767)
     menuOpen: 'Menu',
     menuClose: 'Close menu',
     support: '☕️ Support',
@@ -30,6 +31,10 @@ export const en: Translations = {
     supportLink: 'Open link',
   },
   nav: {
+    // 1767 site (KvK survey + Castle Battle voting) — header 2-tab menu
+    kvk: 'KvK Survey',
+    castle: 'Castle Battle',
+    // PNX legacy keys (unused in 1767)
     beginner: 'Beginner Guide',
     events: 'Events',
     manage: 'Alliance',
@@ -45,6 +50,23 @@ export const en: Translations = {
       pvp: 'Arena',
       troopsCalculator: 'Troops Calculator',
     },
+  },
+  footer: {
+    tagline: 'Kingshot 1767 server tools — KvK Survey and Castle Battle voting in one place.',
+    copy: '© 2026 PNX Toycode. All rights reserved.',
+  },
+  home: {
+    title: '1767 Server Hub',
+    subtitle: 'Server-only tools — KvK Survey & Castle Battle voting in one place.',
+    kvk: {
+      title: 'KvK Survey',
+      description: 'Speed-up inventory survey + buff scheduling',
+    },
+    castle: {
+      title: 'Castle Battle',
+      description: 'Vote on which rallier will hold each target per round',
+    },
+    open: 'Open',
   },
   langSwitcher: {
     label: 'Language',

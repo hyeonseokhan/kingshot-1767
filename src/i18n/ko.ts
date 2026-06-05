@@ -21,7 +21,8 @@ export const ko = {
     playerLookupFailed: '일시적인 문제로 조회에 실패했어요. 잠시 후 다시 시도해주세요.',
   },
   header: {
-    title: '연맹 가이드',
+    title: '1767 서버',
+    // PNX 잔여 키 (1767 에선 미사용)
     menuOpen: '메뉴',
     menuClose: '메뉴 닫기',
     support: '☕️ 후원하기',
@@ -31,6 +32,10 @@ export const ko = {
     supportLink: '바로가기',
   },
   nav: {
+    // 1767 사이트 (KvK 설문 + 캐슬 전투 투표 통합) — Header 의 2-탭 메뉴
+    kvk: 'KvK 설문',
+    castle: '캐슬 전투',
+    // PNX 사이트 잔여 키 (1767 에선 미사용 — 이관 시 함께 잔존)
     beginner: '입문 가이드',
     events: '이벤트',
     manage: '연맹관리',
@@ -46,6 +51,23 @@ export const ko = {
       pvp: '매칭 대결',
       troopsCalculator: '부대 계산기',
     },
+  },
+  footer: {
+    tagline: '킹샷 1767 서버 전용 도구 — KvK 설문과 캐슬 전투 예측 투표를 한 곳에서.',
+    copy: '© 2026 PNX Toycode. All rights reserved.',
+  },
+  home: {
+    title: '1767 서버 허브',
+    subtitle: '서버 전용 도구 모음 — KvK 설문과 캐슬 전투 투표를 한 곳에서.',
+    kvk: {
+      title: 'KvK 설문',
+      description: '가속권 보유 현황 조사 + 버프 예약',
+    },
+    castle: {
+      title: '캐슬 전투',
+      description: '회차별 거점 점령 집결자 예측 투표',
+    },
+    open: '들어가기',
   },
   langSwitcher: {
     label: '언어',

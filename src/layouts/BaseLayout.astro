@@ -1,0 +1,126 @@
+---
+// BaseLayout — 1767 사이트 공통 shell (html/head/body + Header).
+// 서비스별 Layout (SurveyLayout, CastleBattleLayout) 이 본 레이아웃을 감싸 main 영역만 차별화.
+//
+// 룰:
+// - 공통 i18n boot + 폰트 + 통합 헤더 (Header.astro)
+// - body 는 flex column — header 고정 높이 + main 가변
+// - 메인 max-width 등은 각 서비스 Layout 에서 결정
+import '@/styles/global.css';
+import '@/styles/components.css';
+import Header from '@/components/Header.astro';
+
+interface Props {
+  title?: string;
+  description?: string;
+  /** main 컨테이너에 부여할 추가 클래스 (Layout 측에서 폭/패딩 분기용). */
+  mainClass?: string;
+}
+
+const {
+  title = '1767 Server Hub',
+  description = '1767 서버 전용 도구 — KvK 설문 + 캐슬 전투 투표',
+  mainClass = '',
+} = Astro.props;
+---
+
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+    <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css"
+    />
+    <script>
+      import { bootI18n } from '@/i18n';
+      bootI18n();
+
+      // iOS Safari focus ring 차단 (터치 환경 한정 — :focus-visible 비표준 동작 우회).
+      // 데스크탑 키보드 내비 a11y 는 그대로 보존.
+      if (matchMedia('(hover: none) and (pointer: coarse)').matches) {
+        document.addEventListener('click', (e) => {
+          const btn = (e.target as HTMLElement | null)?.closest('button');
+          if (btn) btn.blur();
+        });
+      }
+    </script>
+  </head>
+  <body class="app-body">
+    <Header>
+      <slot name="header-actions" slot="header-actions" />
+    </Header>
+    <main class:list={['app-main', mainClass]}>
+      <slot />
+    </main>
+    <footer class="app-footer">
+      <div class="app-footer-inner">
+        <span class="app-footer-tagline" data-i18n="footer.tagline"
+          >킹샷 1767 서버 전용 도구 — KvK 설문과 캐슬 전투 예측 투표를 한 곳에서.</span
+        >
+        <span class="app-footer-copy" data-i18n="footer.copy"
+          >© 2026 PNX Toycode. All rights reserved.</span
+        >
+      </div>
+    </footer>
+    <style is:global>
+      .app-body {
+        background: var(--brand-bg);
+        background-image: var(--brand-bg-gradient);
+        background-attachment: fixed;
+        color: var(--brand-text);
+        font-family: var(--font);
+        line-height: 1.5;
+        font-size: 14px;
+        min-height: 100vh;
+        min-height: 100dvh;
+        display: flex;
+        flex-direction: column;
+        margin: 0;
+        overflow-y: auto;
+        overflow-x: hidden;
+      }
+      .app-main {
+        flex: 1;
+        min-height: 0;
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+      }
+      /* 통합 footer — 모든 페이지 공통 (홈/KvK/캐슬). 내용은 i18n 으로 swap. */
+      .app-footer {
+        margin-top: auto;
+        border-top: 1px solid var(--brand-border);
+        background: var(--brand-surface);
+        padding: 18px 16px 22px;
+      }
+      .app-footer-inner {
+        max-width: 1400px;
+        margin: 0 auto;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+        text-align: center;
+      }
+      .app-footer-tagline {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--brand-text-dim);
+        line-height: 1.5;
+      }
+      .app-footer-copy {
+        font-size: 11px;
+        color: var(--brand-text-faint);
+      }
+    </style>
+  </body>
+</html>
