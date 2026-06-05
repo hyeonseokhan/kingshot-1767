@@ -250,10 +250,16 @@ async function verifyAuth(playerId: unknown, pin: unknown): Promise<AuthResult> 
   };
 }
 
-async function requireAdmin(playerId: unknown, pin: unknown): Promise<AuthResult> {
-  const me = await verifyAuth(playerId, pin);
-  if (!me.is_admin) throw new Error("not_admin");
-  return me;
+async function requireAdmin(playerId: unknown, _pin: unknown): Promise<AuthResult> {
+  // 관리자 액션은 PIN 재검증 없이 player_id + DB is_admin 컬럼만 확인.
+  // 투표/정보조회 같은 사용자 액션은 verifyAuth(pin 포함)를 그대로 사용.
+  if (!isValidPlayerId(playerId)) throw new Error("invalid_player_id");
+  const member = await dbSelectOne(
+    `members?kingshot_id=eq.${encodeURIComponent(playerId)}&select=kingshot_id,nickname,is_admin`,
+  );
+  if (!member) throw new Error("not_registered");
+  if (!member.is_admin) throw new Error("not_admin");
+  return { player_id: member.kingshot_id, nickname: member.nickname, is_admin: true };
 }
 
 // ─── 회차 / 거점 / 후보 / 투표 ─────────────────────────────────
@@ -751,9 +757,10 @@ async function adminResetVotes(
 
 async function adminGetRoundDetail(playerId: unknown, pin: unknown): Promise<{ ok: boolean; round: any; targets: any[] }> {
   await requireAdmin(playerId, pin);
-  const round = await dbSelectOne(
+  const rounds = await dbSelect(
     "cb_rounds?status=not.eq.archived&order=id.desc&limit=1&select=id,title,event_starts_at,status",
   );
+  const round = rounds[0] ?? null;
   if (!round) return { ok: true, round: null, targets: [] };
 
   const targets = await dbSelect(
