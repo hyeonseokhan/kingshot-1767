@@ -286,8 +286,17 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
 
     try {
       const res = await callFn({ action: 'admin-get-round-detail' });
-      if (!res.ok || !res.round) {
-        body.innerHTML = '<div class="cb-edit-loading">회차 정보를 불러올 수 없습니다</div>';
+      if (!res.ok) {
+        const isAuthErr = res.error === 'invalid_pin' || res.error === 'wrong_pin' || res.error === 'not_admin';
+        body.innerHTML = `<div class="cb-edit-loading">${
+          isAuthErr
+            ? '인증이 만료됐습니다. 로그아웃 후 다시 로그인해 주세요.'
+            : `오류: ${res.error}`
+        }</div>`;
+        return;
+      }
+      if (!res.round) {
+        body.innerHTML = '<div class="cb-edit-loading">진행 중인 회차가 없습니다</div>';
         return;
       }
       adminCurrentRoundId = res.round.id;
