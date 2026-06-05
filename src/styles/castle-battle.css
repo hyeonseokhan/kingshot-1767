@@ -944,7 +944,7 @@
   max-height: calc(100vh - 48px);
 }
 .cb-edit-dlg {
-  width: min(400px, calc(100vw - 24px));
+  width: min(680px, calc(100vw - 24px));
   max-height: calc(100vh - 48px);
 }
 .cb-nr-dlg::backdrop,
@@ -1272,4 +1272,21 @@
 
 @media (max-width: 480px) {
   .cb-nr-form-inputs { grid-template-columns: 72px 1fr auto; }
+}
+
+.cb-edit-loading {
+  padding: 20px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--cb-text-dim);
+}
+
+.cb-nr-section-header {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--cb-text-dim);
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--cb-border);
 }

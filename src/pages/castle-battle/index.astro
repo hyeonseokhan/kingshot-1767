@@ -65,7 +65,7 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
     <>
       <RoundHero round={round} roundIndex={round.id} totalVotes={totalVotes} />
       <Battlefield targets={targets} />
-      <TargetDetailDialog targets={targets} />
+      <TargetDetailDialog targets={targets} roundId={round?.id} roundStatus={round?.status} />
     </>
   ) : (
     <section class="cb-empty-round">
@@ -126,18 +126,12 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
       <div class="cb-nr-header">
         <h2 class="cb-nr-title">회차 수정</h2>
       </div>
-      <div class="cb-nr-body">
-        <div class="cb-nr-section">
-          <div class="cb-nr-field">
-            <label class="cb-nr-label" for="cb-edit-date-input">
-              이벤트 시작 일시 <span class="cb-nr-label-note">KST 기준</span>
-            </label>
-            <input class="cb-nr-input" type="datetime-local" id="cb-edit-date-input" />
-          </div>
-        </div>
+      <div class="cb-nr-body" id="cb-edit-body">
+        <div class="cb-edit-loading" id="cb-edit-loading">데이터 불러오는 중...</div>
       </div>
       <div class="cb-nr-footer">
         <button class="cb-btn cb-btn-danger cb-btn-sm" id="cb-edit-delete-btn">회차 삭제</button>
+        <span class="cb-nr-error" id="cb-edit-error"></span>
         <div class="cb-nr-actions">
           <button class="cb-btn cb-btn-secondary cb-btn-sm" id="cb-edit-cancel">취소</button>
           <button class="cb-btn cb-btn-sm" id="cb-edit-submit">저장</button>
@@ -283,14 +277,56 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
 
   // ─── 회차 수정 다이얼로그 ────────────────────────────────────
 
-  function openEditDlg(eventStartsAt: string): void {
+  async function openEditDlg(): Promise<void> {
     const dlg = document.getElementById('cb-edit-dlg') as HTMLDialogElement;
-    const input = document.getElementById('cb-edit-date-input') as HTMLInputElement;
-    // ISO → datetime-local (KST = UTC+9)
-    const kst = new Date(new Date(eventStartsAt).getTime() + 9 * 3600 * 1000);
-    input.value = kst.toISOString().slice(0, 16);
+    const body = document.getElementById('cb-edit-body') as HTMLElement;
+    body.innerHTML = '<div class="cb-edit-loading">데이터 불러오는 중...</div>';
     dlg.showModal();
+    adminCurrentRoundId = null;
+
+    try {
+      const res = await callFn({ action: 'admin-get-round-detail' });
+      if (!res.ok || !res.round) {
+        body.innerHTML = '<div class="cb-edit-loading">회차 정보를 불러올 수 없습니다</div>';
+        return;
+      }
+      adminCurrentRoundId = res.round.id;
+
+      body.innerHTML = '';
+
+      // 이벤트 시작 일시
+      const kstMs = new Date(res.round.event_starts_at).getTime() + 9 * 3600_000;
+      const kstStr = new Date(kstMs).toISOString().slice(0, 16);
+      const dateSection = document.createElement('div');
+      dateSection.className = 'cb-nr-section';
+      dateSection.innerHTML = `
+        <div class="cb-nr-field">
+          <label class="cb-nr-label">이벤트 시작 일시 <span class="cb-nr-label-note">KST 기준</span></label>
+          <input class="cb-nr-input" type="datetime-local" id="cb-edit-date-input" value="${kstStr}" />
+        </div>
+      `;
+      body.appendChild(dateSection);
+
+      // 거점 슬롯 카드들
+      const slotSection = document.createElement('div');
+      slotSection.className = 'cb-nr-section';
+      const slotTitle = document.createElement('div');
+      slotTitle.className = 'cb-nr-section-title';
+      slotTitle.textContent = '거점별 집결자 설정';
+      slotSection.appendChild(slotTitle);
+      const slotWrap = document.createElement('div');
+      slotWrap.className = 'cb-nr-slots';
+      for (const target of res.targets) {
+        slotWrap.appendChild(buildEditSlotCard(target));
+      }
+      slotSection.appendChild(slotWrap);
+      body.appendChild(slotSection);
+
+    } catch {
+      body.innerHTML = '<div class="cb-edit-loading">불러오기 실패</div>';
+    }
   }
+
   function closeEditDlg(): void {
     (document.getElementById('cb-edit-dlg') as HTMLDialogElement)?.close();
   }
@@ -302,7 +338,7 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
 
   document.getElementById('cb-edit-delete-btn')?.addEventListener('click', async () => {
     if (adminCurrentRoundId === null) return;
-    const ok = await (window as any).appConfirm?.('회차를 삭제하면 모든 후보, 투표 데이터가 함께 삭제됩니다. 삭제하시겠습니까?', { variant: 'danger' })
+    const ok = await (window as any).appConfirm?.('회차를 삭제하면 모든 후보, 투표 데이터가 함께 삭제됩니다.', { variant: 'danger' })
       ?? window.confirm('회차를 삭제하시겠습니까?');
     if (!ok) return;
     try {
@@ -314,20 +350,20 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
   document.getElementById('cb-edit-submit')?.addEventListener('click', async () => {
     if (adminCurrentRoundId === null) return;
     const input = document.getElementById('cb-edit-date-input') as HTMLInputElement;
-    if (!input.value) return;
-    const kstMs = new Date(input.value).getTime() - 9 * 3600 * 1000; // KST → UTC
-    const isoUtc = new Date(kstMs).toISOString();
+    if (!input?.value) return;
+    const errEl = document.getElementById('cb-edit-error') as HTMLElement;
+    const submitBtn = document.getElementById('cb-edit-submit') as HTMLButtonElement;
+    submitBtn.disabled = true;
     try {
-      const res = await callFn({ action: 'admin-update-round', round_id: adminCurrentRoundId, event_starts_at: isoUtc });
+      const utcIso = new Date(new Date(input.value).getTime() - 9 * 3600_000).toISOString();
+      const res = await callFn({ action: 'admin-update-round', round_id: adminCurrentRoundId, event_starts_at: utcIso });
       if (res.ok) { closeEditDlg(); window.location.reload(); }
-    } catch { /* ignore */ }
+      else errEl.textContent = `오류: ${res.error}`;
+    } catch { errEl.textContent = '네트워크 오류'; }
+    finally { submitBtn.disabled = false; }
   });
 
-  document.getElementById('cb-admin-edit-round-btn')?.addEventListener('click', async () => {
-    if (adminCurrentRoundId === null) return;
-    const res = await callFn({ action: 'get-current-round' });
-    if (res.round) openEditDlg(res.round.event_starts_at);
-  });
+  document.getElementById('cb-admin-edit-round-btn')?.addEventListener('click', openEditDlg);
 
   // ─── 슬롯 렌더 ───────────────────────────────────────────────
 
@@ -506,6 +542,154 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
   function closeNewRoundDlg(): void {
     const dlg = document.getElementById('cb-nr-dlg') as HTMLDialogElement;
     if (dlg.open) dlg.close();
+  }
+
+  // ─── 회차 수정 다이얼로그 — 슬롯 카드 빌더 ──────────────────
+
+  const SLOT_LABELS: Record<string, string> = {
+    castle: '캐슬', turret_north: '북쪽 포탑',
+    turret_east: '동쪽 포탑', turret_south: '남쪽 포탑', turret_west: '서쪽 포탑',
+  };
+
+  function addEditBadge(
+    badgeList: HTMLElement,
+    cand: { candidate_id: number; alliance_tag: string; rallier_nickname: string; kingshot_id?: string | null; profile_photo?: string | null },
+  ): void {
+    const photo = cand.profile_photo ?? '';
+    const nick = cand.rallier_nickname ?? '';
+    const tag = cand.alliance_tag ?? '';
+    const item = document.createElement('div');
+    item.className = 'cb-nr-cand-badge';
+    item.dataset.candidateId = String(cand.candidate_id);
+    const avatarHtml = photo
+      ? `<img class="cb-nr-badge-img" src="${esc(photo)}" alt="" />`
+      : `<span class="cb-nr-badge-initial">${esc((nick.charAt(0) || '?').toUpperCase())}</span>`;
+    item.innerHTML = `
+      <span class="cb-nr-badge-avatar">${avatarHtml}</span>
+      <span class="cb-nr-badge-tag">${esc(tag)}</span>
+      <span class="cb-nr-badge-nick">${esc(nick)}</span>
+      <button class="cb-nr-badge-remove" type="button" title="제거">✕</button>
+    `;
+    item.querySelector('.cb-nr-badge-remove')!.addEventListener('click', async () => {
+      try {
+        const r = await callFn({ action: 'admin-remove-candidate', candidate_id: cand.candidate_id });
+        if (r.ok) item.remove();
+      } catch { /* ignore */ }
+    });
+    badgeList.appendChild(item);
+  }
+
+  function buildEditSlotCard(targetData: {
+    target_id: number; slot: string; is_open: boolean;
+    candidates: Array<{ candidate_id: number; alliance_tag: string; rallier_nickname: string; kingshot_id?: string | null; profile_photo?: string | null }>;
+  }): HTMLElement {
+    const card = document.createElement('div');
+    card.className = 'cb-nr-slot';
+    card.dataset.slot = targetData.slot;
+    card.dataset.targetId = String(targetData.target_id);
+
+    card.innerHTML = `
+      <div class="cb-nr-slot-header">
+        <span class="cb-nr-slot-label">${SLOT_LABELS[targetData.slot] ?? targetData.slot}</span>
+        <label class="cb-nr-slot-toggle">
+          <input type="checkbox" class="cb-nr-open-chk" ${targetData.is_open ? 'checked' : ''}>
+          <span>투표 진행</span>
+        </label>
+      </div>
+      <div class="cb-nr-cands ${targetData.is_open ? '' : 'is-hidden'}">
+        <div class="cb-nr-badge-list"></div>
+        <div class="cb-nr-form">
+          <div class="cb-nr-form-inputs">
+            <input class="cb-nr-input cb-nr-f-tag" type="text" placeholder="연맹 (PNX)" maxlength="20" />
+            <input class="cb-nr-input cb-nr-f-ksid" type="tel" placeholder="킹샷 ID" maxlength="15" pattern="[0-9]*" />
+            <button class="cb-nr-lookup-btn" type="button">조회</button>
+          </div>
+          <div class="cb-nr-form-preview" hidden>
+            <div class="cb-nr-preview-row">
+              <div class="cb-nr-badge">
+                <span class="cb-nr-badge-avatar">
+                  <img class="cb-nr-badge-img" alt="" hidden />
+                  <span class="cb-nr-badge-initial"></span>
+                </span>
+                <span class="cb-nr-badge-nick"></span>
+              </div>
+              <button class="cb-nr-add-btn" type="button">후보 등록</button>
+            </div>
+          </div>
+          <span class="cb-nr-lookup-err"></span>
+        </div>
+      </div>
+    `;
+
+    const chk = card.querySelector('.cb-nr-open-chk') as HTMLInputElement;
+    const cands = card.querySelector('.cb-nr-cands') as HTMLElement;
+    chk.addEventListener('change', async () => {
+      cands.classList.toggle('is-hidden', !chk.checked);
+      await callFn({ action: 'admin-set-target-open', target_id: targetData.target_id, is_open: chk.checked });
+    });
+
+    const badgeList = card.querySelector('.cb-nr-badge-list') as HTMLElement;
+    for (const cand of targetData.candidates) addEditBadge(badgeList, cand);
+
+    const tagInput = card.querySelector('.cb-nr-f-tag') as HTMLInputElement;
+    const ksidInput = card.querySelector('.cb-nr-f-ksid') as HTMLInputElement;
+    const lookupBtn = card.querySelector('.cb-nr-lookup-btn') as HTMLButtonElement;
+    const previewEl = card.querySelector('.cb-nr-form-preview') as HTMLElement;
+    const badgeImg = card.querySelector('.cb-nr-badge-img') as HTMLImageElement;
+    const badgeInitial = card.querySelector('.cb-nr-badge-initial') as HTMLElement;
+    const badgeNick = card.querySelector('.cb-nr-badge-nick') as HTMLElement;
+    const lookupErr = card.querySelector('.cb-nr-lookup-err') as HTMLElement;
+    const addBtn = card.querySelector('.cb-nr-add-btn') as HTMLButtonElement;
+
+    let fetched: { nickname: string; profile_photo: string } | null = null;
+
+    lookupBtn.addEventListener('click', async () => {
+      const ksid = ksidInput.value.trim();
+      if (!/^\d{4,15}$/.test(ksid)) { ksidInput.focus(); return; }
+      lookupBtn.disabled = true; lookupBtn.textContent = '...';
+      fetched = null; previewEl.hidden = true; lookupErr.textContent = '';
+      try {
+        const res = await callFn({ action: 'lookup-player', kingshot_id: ksid });
+        if (res.ok) {
+          fetched = { nickname: res.nickname ?? '', profile_photo: res.profile_photo ?? '' };
+          if (fetched.profile_photo) { badgeImg.src = fetched.profile_photo; badgeImg.hidden = false; badgeInitial.hidden = true; }
+          else { badgeImg.hidden = true; badgeInitial.textContent = (fetched.nickname.charAt(0) || '?').toUpperCase(); (badgeInitial as HTMLElement).hidden = false; }
+          badgeNick.textContent = fetched.nickname;
+          previewEl.hidden = false; lookupBtn.textContent = '재조회';
+        } else { lookupErr.textContent = '플레이어를 찾을 수 없습니다'; lookupBtn.textContent = '조회'; }
+      } catch { lookupBtn.textContent = '조회'; }
+      finally { lookupBtn.disabled = false; }
+    });
+
+    addBtn.addEventListener('click', async () => {
+      const tag = tagInput.value.trim();
+      if (!tag) { tagInput.focus(); return; }
+      if (!fetched) return;
+      addBtn.disabled = true;
+      try {
+        const res = await callFn({
+          action: 'admin-add-candidate-full',
+          target_id: targetData.target_id,
+          alliance_tag: tag,
+          rallier_nickname: fetched.nickname,
+          kingshot_id: ksidInput.value.trim() || null,
+          profile_photo: fetched.profile_photo || null,
+        });
+        if (res.ok) {
+          addEditBadge(badgeList, {
+            candidate_id: res.candidate_id,
+            alliance_tag: tag,
+            rallier_nickname: fetched.nickname,
+            kingshot_id: ksidInput.value.trim() || null,
+            profile_photo: fetched.profile_photo || null,
+          });
+          tagInput.value = ''; ksidInput.value = ''; fetched = null;
+          previewEl.hidden = true; lookupBtn.textContent = '조회'; tagInput.focus();
+        }
+      } finally { addBtn.disabled = false; }
+    });
+
+    return card;
   }
 
   // ─── 회차 등록 제출 ──────────────────────────────────────────

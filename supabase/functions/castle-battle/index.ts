@@ -749,6 +749,95 @@ async function adminResetVotes(
   return { ok: true };
 }
 
+async function adminGetRoundDetail(playerId: unknown, pin: unknown): Promise<{ ok: boolean; round: any; targets: any[] }> {
+  await requireAdmin(playerId, pin);
+  const round = await dbSelectOne(
+    "cb_rounds?status=not.eq.archived&order=id.desc&limit=1&select=id,title,event_starts_at,status",
+  );
+  if (!round) return { ok: true, round: null, targets: [] };
+
+  const targets = await dbSelect(
+    `cb_targets?round_id=eq.${round.id}&select=id,slot,is_open&order=id.asc`,
+  );
+  const targetIds = targets.map((t: any) => t.id).join(",");
+  const candidates = targetIds
+    ? await dbSelect(
+        `cb_candidates?target_id=in.(${targetIds})&select=id,target_id,alliance_tag,rallier_nickname,kingshot_id&order=id.asc`,
+      )
+    : [];
+
+  const ksids = [...new Set(
+    candidates.filter((c: any) => c.kingshot_id).map((c: any) => c.kingshot_id),
+  )];
+  const rallierMap: Record<string, string> = {};
+  if (ksids.length) {
+    const ralliers = await dbSelect(
+      `cb_ralliers?kingshot_id=in.(${ksids.map((k) => encodeURIComponent(k as string)).join(",")})&select=kingshot_id,profile_photo`,
+    );
+    for (const r of ralliers) rallierMap[r.kingshot_id] = r.profile_photo ?? "";
+  }
+
+  const enriched = targets.map((t: any) => ({
+    target_id: t.id,
+    slot: t.slot,
+    is_open: t.is_open,
+    candidates: candidates
+      .filter((c: any) => c.target_id === t.id)
+      .map((c: any) => ({
+        candidate_id: c.id,
+        alliance_tag: c.alliance_tag ?? "",
+        rallier_nickname: c.rallier_nickname ?? "",
+        kingshot_id: c.kingshot_id ?? null,
+        profile_photo: c.kingshot_id ? (rallierMap[c.kingshot_id] ?? null) : null,
+      })),
+  }));
+
+  return { ok: true, round, targets: enriched };
+}
+
+async function adminAddCandidateFull(
+  playerId: unknown,
+  pin: unknown,
+  targetId: unknown,
+  allianceTag: unknown,
+  rallierNickname: unknown,
+  kingshotId: unknown,
+  profilePhoto: unknown,
+): Promise<{ ok: boolean; candidate_id: number }> {
+  await requireAdmin(playerId, pin);
+  if (typeof targetId !== "number" || !allianceTag || !rallierNickname) throw new Error("missing_field");
+
+  const target = await dbSelectOne(`cb_targets?id=eq.${targetId}&select=id,round_id`);
+  if (!target) throw new Error("target_not_found");
+
+  let alliance = await dbSelectOne(
+    `cb_alliances?tag=eq.${encodeURIComponent(allianceTag as string)}&select=id`,
+  );
+  if (!alliance) {
+    const rows = await dbInsert("cb_alliances", { tag: allianceTag, name: allianceTag }, true);
+    alliance = (rows as any[])[0];
+  }
+
+  const rows = await dbInsert(
+    "cb_candidates",
+    {
+      target_id: targetId,
+      alliance_id: alliance.id,
+      alliance_tag: allianceTag,
+      rallier_nickname: rallierNickname,
+      kingshot_id: kingshotId || null,
+    },
+    true,
+  );
+  const candidate = (rows as any[])[0];
+
+  if (kingshotId && rallierNickname) {
+    await upsertRallier(kingshotId as string, rallierNickname as string, (profilePhoto as string) ?? null);
+  }
+
+  return { ok: true, candidate_id: candidate.id };
+}
+
 // ─── 서버 ────────────────────────────────────────────────────
 
 Deno.serve(async (req: Request) => {
@@ -824,6 +913,15 @@ Deno.serve(async (req: Request) => {
         break;
       case "admin-reset-votes":
         result = await adminResetVotes(body.player_id, body.pin, body.round_id);
+        break;
+      case "admin-get-round-detail":
+        result = await adminGetRoundDetail(body.player_id, body.pin);
+        break;
+      case "admin-add-candidate-full":
+        result = await adminAddCandidateFull(
+          body.player_id, body.pin, body.target_id,
+          body.alliance_tag, body.rallier_nickname, body.kingshot_id, body.profile_photo,
+        );
         break;
 
       default:

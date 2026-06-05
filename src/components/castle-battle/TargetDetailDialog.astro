@@ -15,11 +15,13 @@ import Compass from './Compass.astro';
 
 interface Props {
   targets: TargetView[];
+  roundId?: number | null;
+  roundStatus?: string | null;
 }
-const { targets } = Astro.props;
+const { targets, roundId, roundStatus } = Astro.props;
 ---
 
-<dialog class="cb-detail-dialog" id="cb-detail-dialog" aria-labelledby="cb-detail-title">
+<dialog class="cb-detail-dialog" id="cb-detail-dialog" aria-labelledby="cb-detail-title" data-round-id={roundId ?? ''} data-round-status={roundStatus ?? ''}>
   <button
     class="cb-detail-close"
     type="button"
@@ -86,6 +88,13 @@ const { targets } = Astro.props;
                     <span class="cb-detail-cand-spacer"></span>
                     <span class="cb-detail-cand-count">{c.vote_count}표</span>
                     <span class="cb-detail-cand-pct">{c.vote_pct}%</span>
+                    <button
+                      class="cb-vote-btn"
+                      type="button"
+                      data-target-id={t.target_id}
+                      data-candidate-id={c.candidate_id}
+                      hidden
+                    >투표</button>
                     <svg class="cb-detail-cand-chevron" viewBox="0 0 12 12" aria-hidden="true">
                       <path d="M3 4.5 L6 8 L9 4.5" stroke="currentColor" stroke-width="1.5"
                             fill="none" stroke-linecap="round" stroke-linejoin="round" />
@@ -118,6 +127,7 @@ const { targets } = Astro.props;
   // voter chip 펼침 → lazy fetch (cb_votes JOIN members).
   import { getVoters } from '@/lib/castle-battle/queries';
   import type { VoterView } from '@/lib/castle-battle/types';
+  import { SUPABASE_URL, SUPABASE_ANON_KEY } from '@/lib/shared/supabase';
 
   const AUTH_KEY = 'pnx-mb-auth-v1';
   function myKsId(): string | null {
@@ -128,12 +138,108 @@ const { targets } = Astro.props;
       return obj?.record?.kingshot_id ?? null;
     } catch { return null; }
   }
+  function getAuthRecord(): { kingshot_id: string; pin?: string } | null {
+    try {
+      const obj = JSON.parse(localStorage.getItem(AUTH_KEY) ?? '');
+      if (!obj?.record?.kingshot_id) return null;
+      return obj.record;
+    } catch { return null; }
+  }
+
+  const CB_FN_URL = SUPABASE_URL + '/functions/v1/castle-battle';
+
+  async function callCbFn(body: Record<string, unknown>): Promise<any> {
+    const auth = getAuthRecord();
+    const base = auth ? { player_id: auth.kingshot_id, pin: auth.pin } : {};
+    const payload = { ...base, ...body };
+    const res = await fetch(CB_FN_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: 'Bearer ' + SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify(payload),
+    });
+    return res.json();
+  }
+
+  async function loadVoteState(roundId: number, targetId: string): Promise<void> {
+    try {
+      const res = await callCbFn({ action: 'my-votes', round_id: roundId });
+      if (!res.ok) return;
+      const myVote = (res.votes as Array<{ target_id: number; candidate_id: number }>)
+        .find((v) => String(v.target_id) === targetId);
+      const section = document.querySelector<HTMLElement>(`.cb-detail-target[data-target-id="${targetId}"]`);
+      if (!section) return;
+      const allBtns = section.querySelectorAll<HTMLButtonElement>('.cb-vote-btn');
+      if (myVote) {
+        // 이미 투표한 경우 — 해당 후보에 is-mine 마크, 모든 버튼 숨김
+        allBtns.forEach((btn) => { btn.hidden = true; });
+        const candId = String(myVote.candidate_id);
+        const candEl = section.querySelector<HTMLElement>(`.cb-detail-cand[data-candidate-id="${candId}"]`);
+        if (candEl) {
+          candEl.classList.add('is-mine');
+          const info = candEl.querySelector('.cb-detail-cand-info');
+          if (info && !info.querySelector('.cb-detail-cand-mine')) {
+            const badge = document.createElement('span');
+            badge.className = 'cb-detail-cand-mine';
+            badge.textContent = '✓ 내 표';
+            const spacer = info.querySelector('.cb-detail-cand-spacer');
+            if (spacer) info.insertBefore(badge, spacer);
+            else info.appendChild(badge);
+          }
+        }
+      } else {
+        // 미투표 — 버튼 표시
+        allBtns.forEach((btn) => { btn.hidden = false; });
+      }
+    } catch { /* ignore */ }
+  }
+
+  async function handleVote(targetId: string, candidateId: string, btn: HTMLButtonElement): Promise<void> {
+    btn.disabled = true;
+    try {
+      const res = await callCbFn({
+        action: 'cast-vote',
+        target_id: Number(targetId),
+        candidate_id: Number(candidateId),
+      });
+      if (res.ok) {
+        const section = btn.closest<HTMLElement>('.cb-detail-target');
+        if (section) {
+          // 해당 target 의 모든 투표 버튼 숨김
+          section.querySelectorAll<HTMLButtonElement>('.cb-vote-btn').forEach((b) => { b.hidden = true; });
+          // 해당 후보에 is-mine 마크
+          const candEl = section.querySelector<HTMLElement>(`.cb-detail-cand[data-candidate-id="${candidateId}"]`);
+          if (candEl) {
+            candEl.classList.add('is-mine');
+            const info = candEl.querySelector('.cb-detail-cand-info');
+            if (info && !info.querySelector('.cb-detail-cand-mine')) {
+              const badge = document.createElement('span');
+              badge.className = 'cb-detail-cand-mine';
+              badge.textContent = '✓ 내 표';
+              const spacer = info.querySelector('.cb-detail-cand-spacer');
+              if (spacer) info.insertBefore(badge, spacer);
+              else info.appendChild(badge);
+            }
+          }
+        }
+      } else {
+        btn.disabled = false;
+      }
+    } catch {
+      btn.disabled = false;
+    }
+  }
 
   function init() {
     const dlg = document.getElementById('cb-detail-dialog') as HTMLDialogElement | null;
     if (!dlg) return;
 
     const sections = dlg.querySelectorAll<HTMLElement>('.cb-detail-target');
+    const roundId = dlg.dataset.roundId ? Number(dlg.dataset.roundId) : null;
+    const roundStatus = dlg.dataset.roundStatus ?? '';
 
     // 카드 클릭 → 해당 target section 표시 + 다이얼로그 오픈
     document.querySelectorAll<HTMLElement>('.cb-target:not(.is-free)').forEach((card) => {
@@ -144,11 +250,26 @@ const { targets } = Astro.props;
         sections.forEach((s) => s.toggleAttribute('hidden', s.dataset.targetId !== tid));
         if (typeof dlg.showModal === 'function') dlg.showModal();
         else dlg.setAttribute('open', '');
+        // voting 상태이고 로그인 상태이면 투표 상태 로드
+        if (roundStatus === 'voting' && myKsId() && roundId) {
+          loadVoteState(roundId, tid);
+        }
       });
     });
     // backdrop 클릭 시 닫기
     dlg.addEventListener('click', (e) => {
       if (e.target === dlg) dlg.close();
+    });
+
+    // 투표 버튼 클릭 — details 토글 방지 + vote 처리
+    dlg.addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('.cb-vote-btn');
+      if (!btn) return;
+      e.stopPropagation();
+      e.preventDefault();
+      const targetId = btn.dataset.targetId;
+      const candidateId = btn.dataset.candidateId;
+      if (targetId && candidateId) handleVote(targetId, candidateId, btn);
     });
 
     // voter chip lazy fetch — details 펼침 시 1회만.
@@ -476,4 +597,18 @@ const { targets } = Astro.props;
     }
     .cb-detail-hero { height: 150px; }
   }
+
+  .cb-vote-btn {
+    background: var(--cb-accent);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 3px 10px;
+    font: inherit; font-size: 11.5px; font-weight: 700;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: filter 0.12s;
+  }
+  .cb-vote-btn:hover { filter: brightness(1.1); }
+  .cb-vote-btn:disabled { opacity: 0.5; cursor: default; }
 </style>
