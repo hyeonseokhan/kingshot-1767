@@ -1,7 +1,7 @@
 ---
 // 5 거점 카드 그리드 컨테이너 — SLOT_RENDER_ORDER 대로 정렬.
 // SSR 시점에 page 에서 targets[] 전달, 누락된 슬롯은 fallback (등록되지 않은 거점) 으로 채움.
-import type { TargetView } from '@/lib/castle-battle/types';
+import type { TargetView, CbTargetSlot } from '@/lib/castle-battle/types';
 import { SLOT_RENDER_ORDER } from '@/lib/castle-battle/types';
 import TargetCard from './TargetCard.astro';
 
@@ -11,38 +11,17 @@ interface Props {
 const { targets } = Astro.props;
 
 const bySlot = new Map(targets.map((t) => [t.slot, t]));
-const ordered = SLOT_RENDER_ORDER.map((slot) => bySlot.get(slot) ?? null);
+
+function emptyTarget(slot: CbTargetSlot): TargetView {
+  return { target_id: 0, slot, is_open: false, candidates: [], total_votes: 0, leader: null, my_vote: null };
+}
 ---
 
 <section class="cb-battlefield">
-  {ordered.map((target, i) =>
-    target ? (
-      <TargetCard target={target} />
-    ) : (
-      <article class="cb-target cb-target-empty" data-slot={SLOT_RENDER_ORDER[i]}>
-        <div class="cb-target-empty-body">
-          <span class="cb-target-empty-text">거점 미등록</span>
-        </div>
-      </article>
-    ),
-  )}
+  {SLOT_RENDER_ORDER.map((slot) => {
+    const target = bySlot.get(slot);
+    return target
+      ? <TargetCard target={target} />
+      : <TargetCard target={emptyTarget(slot)} isEmpty={true} />;
+  })}
 </section>
-
-<style>
-  .cb-target-empty {
-    background: rgba(15, 23, 42, 0.02);
-    border: 1px dashed var(--cb-border-strong);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .cb-target-empty-body {
-    padding: 16px;
-    text-align: center;
-  }
-  .cb-target-empty-text {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--cb-text-dim);
-  }
-</style>

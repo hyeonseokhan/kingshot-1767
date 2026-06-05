@@ -119,7 +119,7 @@ const { targets } = Astro.props;
   import { getVoters } from '@/lib/castle-battle/queries';
   import type { VoterView } from '@/lib/castle-battle/types';
 
-  const AUTH_KEY = 'pnx-sk-auth-v1';
+  const AUTH_KEY = 'pnx-mb-auth-v1';
   function myKsId(): string | null {
     try {
       const raw = localStorage.getItem(AUTH_KEY);
