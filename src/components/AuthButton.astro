@@ -18,6 +18,9 @@
   {/* 비로그인 */}
   <button class="hu-login" id="hu-login" type="button" data-i18n="common.login">로그인</button>
 
+  {/* 관리자 패널 버튼 — is_admin=true 시 헤더에 노출 */}
+  <a class="hu-admin-btn" id="hu-admin-btn" href="/castle-battle/admin" hidden>⚙ 관리 패널</a>
+
   {/* 로그인 */}
   <div class="hu-card" id="hu-card" hidden>
     <button
@@ -47,7 +50,17 @@
       </svg>
     </button>
     <div class="hu-dropdown" id="hu-dropdown" role="menu" hidden>
-      <div class="hu-dropdown-name" id="hu-dropdown-name">-</div>
+      <div class="hu-dropdown-name" id="hu-dropdown-name">
+        <span id="hu-dropdown-name-text">-</span>
+        <span class="hu-admin-badge" id="hu-admin-badge" hidden>관리자</span>
+      </div>
+      <a
+        class="hu-dropdown-item"
+        id="hu-admin-link"
+        href="/castle-battle/admin"
+        role="menuitem"
+        hidden
+      >⚙ 관리 패널</a>
       <button
         class="hu-dropdown-logout"
         id="hu-logout-btn"
@@ -70,7 +83,10 @@
     const avatarInitial = document.getElementById('hu-avatar-initial');
     const nameEl = document.getElementById('hu-name');
     const dropdown = document.getElementById('hu-dropdown');
-    const dropdownName = document.getElementById('hu-dropdown-name');
+    const dropdownNameText = document.getElementById('hu-dropdown-name-text');
+    const adminBadge = document.getElementById('hu-admin-badge');
+    const adminLink = document.getElementById('hu-admin-link');
+    const adminBtn = document.getElementById('hu-admin-btn');
     const logoutItem = document.getElementById('hu-logout-btn');
     if (!root || !loginBtn || !card || !trigger || !nameEl || !dropdown || !logoutItem) return;
 
@@ -109,7 +125,12 @@
         card!.removeAttribute('hidden');
         const nick = auth.record.nickname || '인증됨';
         nameEl!.textContent = nick;
-        if (dropdownName) dropdownName.textContent = nick;
+        if (dropdownNameText) dropdownNameText.textContent = nick;
+        // 관리자 버튼 (헤더 + 드롭다운)
+        const isAdmin = !!auth.record.is_admin;
+        if (adminBtn) adminBtn.hidden = !isAdmin;
+        if (adminBadge) adminBadge.hidden = !isAdmin;
+        if (adminLink) adminLink.hidden = !isAdmin;
         // avatar — profile_photo / avatar_url 둘 다 호환
         const url = auth.record.avatar_url || null;
         if (avatarImg) {
@@ -129,6 +150,7 @@
         root!.dataset.state = 'loggedout';
         loginBtn!.removeAttribute('hidden');
         card!.setAttribute('hidden', '');
+        if (adminBtn) adminBtn.hidden = true;
         closeDropdown();
       }
     }
@@ -179,6 +201,26 @@
     align-items: center;
     flex-shrink: 0;
   }
+
+  /* 관리자 패널 버튼 — 헤더 액션 영역 */
+  .hu-admin-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: linear-gradient(135deg, #7c3aed, #a855f7);
+    color: #fff;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 5px 11px;
+    border-radius: 6px;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: opacity 0.15s, box-shadow 0.15s;
+    box-shadow: 0 1px 4px rgba(124, 58, 237, 0.25);
+  }
+  .hu-admin-btn:hover { opacity: 0.85; box-shadow: 0 2px 8px rgba(124, 58, 237, 0.35); }
+  .hu-admin-btn[hidden] { display: none; }
 
   /* 비로그인 — 플랫 텍스트 버튼 (PNX hu-login 결) */
   .hu-login {
@@ -273,7 +315,37 @@
     border-bottom: 1px solid var(--brand-border);
     margin-bottom: 4px;
     word-break: break-all;
+    display: flex;
+    align-items: center;
+    gap: 6px;
   }
+  .hu-admin-badge {
+    font-size: 10px;
+    font-weight: 700;
+    color: #fff;
+    background: linear-gradient(135deg, #7c3aed, #a855f7);
+    padding: 1px 6px;
+    border-radius: 999px;
+    flex-shrink: 0;
+  }
+  .hu-dropdown-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    text-decoration: none;
+    color: var(--brand-text);
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 8px 10px;
+    border-radius: 6px;
+    transition: background 0.12s, color 0.12s;
+  }
+  .hu-dropdown-item:hover {
+    background: rgba(124, 58, 237, 0.08);
+    color: var(--brand-accent);
+  }
+  .hu-dropdown-item[hidden] { display: none; }
   .hu-dropdown-logout {
     display: inline-flex;
     align-items: center;
