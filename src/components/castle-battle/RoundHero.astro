@@ -1,0 +1,92 @@
+---
+// 회차 헤더 — Round 번호 / 제목 / 메타 / 상태 배지.
+// 메타: 이벤트 시작 시각 + 전체 참여자 수 + 마감까지 카운트다운(클라이언트 tick).
+import type { CbRound } from '@/lib/castle-battle/types';
+
+interface Props {
+  round: CbRound;
+  /** 회차 시퀀스 번호 (UI 라벨 — "Round 7" 같은 형식). */
+  roundIndex: number;
+  /** 회차 전체 거점 총 표수 (참여자 ≈ 거점 5 × 1인1표 가정으로 산출 어려움 — 단순 전체 표 합계로). */
+  totalVotes: number;
+}
+const { round, roundIndex, totalVotes } = Astro.props;
+
+const eventDate = new Date(round.event_starts_at);
+const eventDateLabel = eventDate.toLocaleString('ko-KR', {
+  month: 'long',
+  day: 'numeric',
+  weekday: 'short',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+});
+
+const statusLabel: Record<string, string> = {
+  preparing: '준비 중',
+  voting: '투표 진행 중',
+  voting_closed: '투표 마감',
+  results_in: '결과 입력',
+  archived: '아카이브',
+};
+---
+
+<section class="cb-hero">
+  <div class="cb-hero-eyebrow">— Round {roundIndex} —</div>
+  <h1 class="cb-hero-title">{round.title}</h1>
+  <div class="cb-hero-meta">
+    <span class="cb-hero-meta-item">📅 {eventDateLabel}</span>
+    <span class="cb-hero-meta-dot"></span>
+    <span class="cb-hero-meta-item">🗳 {totalVotes}표</span>
+    {round.voting_closed_at && (
+      <>
+        <span class="cb-hero-meta-dot"></span>
+        <span class="cb-hero-meta-item" id="cb-countdown" data-deadline={round.voting_closed_at}>
+          ⏱ 마감까지
+        </span>
+      </>
+    )}
+  </div>
+  <div>
+    <span
+      class:list={[
+        'cb-status-badge',
+        { 'cb-status-voting': round.status === 'voting' },
+      ]}
+    >
+      {statusLabel[round.status] ?? round.status}
+    </span>
+  </div>
+</section>
+
+<script>
+  // 마감 카운트다운 — 1초 tick. data-deadline 없으면 noop.
+  function pad(n: number): string {
+    return n.toString().padStart(2, '0');
+  }
+  function start() {
+    const el = document.getElementById('cb-countdown');
+    if (!el) return;
+    const iso = el.dataset.deadline;
+    if (!iso) return;
+    const deadline = new Date(iso).getTime();
+    function tick() {
+      const diff = deadline - Date.now();
+      if (diff <= 0) {
+        el!.textContent = '⏱ 투표 마감';
+        return;
+      }
+      const h = Math.floor(diff / 3600_000);
+      const m = Math.floor((diff % 3600_000) / 60_000);
+      const s = Math.floor((diff % 60_000) / 1000);
+      el!.textContent = `⏱ 마감까지 ${pad(h)}:${pad(m)}:${pad(s)}`;
+      setTimeout(tick, 1000);
+    }
+    tick();
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', start);
+  } else {
+    start();
+  }
+</script>

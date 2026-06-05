@@ -1,0 +1,106 @@
+---
+// 단일 거점 카드 — 이미지 + 컴파스 + 1위 포트레이트 + leader-row + 후보 리스트 (영역 스크롤).
+//
+// is_open=false (자유전투) 면 cb-cands 대신 안내 박스.
+// 클릭 시 page 가 dialog 를 띄움 (data-target-id attr 만 부여, 핸들러는 page 인라인 script).
+import type { TargetView } from '@/lib/castle-battle/types';
+import { SLOT_LABEL } from '@/lib/castle-battle/types';
+import Compass from './Compass.astro';
+import LeaderPortrait from './LeaderPortrait.astro';
+
+interface Props {
+  target: TargetView;
+}
+const { target } = Astro.props;
+
+const isCastle = target.slot === 'castle';
+const isFree = !target.is_open;
+const isVoted = target.my_vote !== null;
+
+const imgUrl = isCastle ? '/castle-battle/캐슬.png' : '/castle-battle/포탑.png';
+const slotLabel = SLOT_LABEL[target.slot];
+---
+
+<article
+  class:list={['cb-target', { 'is-free': isFree }]}
+  data-slot={target.slot}
+  data-target-id={target.target_id}
+>
+  <div class="cb-target-img-wrap">
+    <div class="cb-target-img" style={`background-image:url('${imgUrl}')`}></div>
+    <div class="cb-target-img-overlay"></div>
+    {!isFree && target.leader && <LeaderPortrait candidate={target.leader} />}
+    <div class="cb-target-label">
+      <div class="cb-target-label-main">
+        <Compass slot={target.slot} />
+        <span class="cb-target-name">{slotLabel}</span>
+      </div>
+      {isFree ? (
+        <span class="cb-target-tag tag-free">자유전투</span>
+      ) : isVoted ? (
+        <span class="cb-target-tag tag-voted">✓ 투표함</span>
+      ) : (
+        <span class="cb-target-tag">진행 중</span>
+      )}
+    </div>
+  </div>
+
+  {isFree ? (
+    <div class="cb-free-body">
+      <span class="cb-free-main">자유전투</span>
+      <span class="cb-free-sub">FREE BATTLE</span>
+      <div class="cb-free-desc">이번 회차는 베팅 대상에서 제외된 거점입니다</div>
+    </div>
+  ) : (
+    /* 캐슬은 leader-portrait 가 이미 모든 정보 — leader-row 숨김 (castle-battle.css 룰).
+       포탑은 leader-row 도 노출. */
+    <>
+      {target.leader && (
+        <div class="cb-leader-row">
+          <div class="cb-leader-rank">1위</div>
+          <div class="cb-leader-info">
+            <span class="cb-leader-alliance">{target.leader.alliance_tag}</span>
+            <span class="cb-leader-name">{target.leader.rallier_nickname}</span>
+          </div>
+          <div class="cb-leader-count">
+            {target.leader.vote_count}표 · {target.leader.vote_pct}%
+          </div>
+        </div>
+      )}
+      <div class="cb-cands">
+        {target.candidates.length === 0 ? (
+          <div class="cb-cands-empty">등록된 집결자가 없습니다</div>
+        ) : (
+          target.candidates.map((cand) => (
+            <div
+              class:list={[
+                'cb-cand',
+                {
+                  'is-leading': cand.candidate_id === target.leader?.candidate_id,
+                  'is-voted': cand.is_mine,
+                },
+              ]}
+            >
+              <span class="cb-cand-tag">{cand.alliance_tag}</span>
+              <span class="cb-cand-name">{cand.rallier_nickname}</span>
+              <span class="cb-cand-pct">{cand.vote_pct}%</span>
+              <div class="cb-cand-bar">
+                <div style={`width:${cand.vote_pct}%`}></div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </>
+  )}
+</article>
+
+<style>
+  .cb-cands-empty {
+    padding: 16px 12px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--cb-text-dim);
+    font-style: italic;
+  }
+</style>

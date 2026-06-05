@@ -1,0 +1,33 @@
+---
+// 거점 1위 포트레이트 — 이미지 중앙 오버레이.
+// profile_photo 가 있으면 <img>, 없으면 violet 그라데이션 + 닉네임 첫 글자 fallback.
+//
+// 클래스명은 castle-battle.css 의 기존 .cb-leader-portrait* 규칙을 그대로 사용 (재사용).
+import type { CandidateView } from '@/lib/castle-battle/types';
+
+interface Props {
+  candidate: CandidateView;
+}
+const { candidate } = Astro.props;
+const initial = (candidate.rallier_nickname || '?').charAt(0);
+---
+
+<div class="cb-leader-portrait">
+  {candidate.profile_photo ? (
+    <div
+      class="cb-leader-portrait-img"
+      style={`background-image:url('${candidate.profile_photo}')`}
+    />
+  ) : (
+    <div class="cb-leader-portrait-img">{initial}</div>
+  )}
+  <div class="cb-leader-portrait-info">
+    <div class="cb-leader-portrait-name">{candidate.rallier_nickname}</div>
+    <div class="cb-leader-portrait-stats">
+      <span class="cb-leader-portrait-tag">{candidate.alliance_tag}</span>
+      <span class="cb-leader-portrait-votes">
+        {candidate.vote_count}표 · {candidate.vote_pct}%
+      </span>
+    </div>
+  </div>
+</div>

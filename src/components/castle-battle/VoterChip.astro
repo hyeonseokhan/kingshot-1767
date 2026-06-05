@@ -1,0 +1,37 @@
+---
+// 투표자 1명 chip — avatar(이미지 or 이니셜) + 닉네임. is_me 면 cyan 강조.
+import type { VoterView } from '@/lib/castle-battle/types';
+
+interface Props {
+  voter: VoterView;
+}
+const { voter } = Astro.props;
+const initial = (voter.nickname || '?').charAt(0);
+---
+
+<span class:list={['cb-voter', { 'is-me': voter.is_me }]}>
+  <span class="cb-voter-avatar">
+    {voter.profile_photo ? (
+      <img src={voter.profile_photo} alt="" loading="lazy" decoding="async" />
+    ) : (
+      <span class="cb-voter-avatar-initial">{initial}</span>
+    )}
+  </span>
+  <span class="cb-voter-name">{voter.nickname}</span>
+</span>
+
+<style>
+  /* Astro scoped: avatar 내부 이미지 cover. 기존 .cb-voter-avatar 룰 (20×20, 라운드 50%) 위에 얹음. */
+  .cb-voter-avatar {
+    overflow: hidden;
+  }
+  .cb-voter-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .cb-voter-avatar-initial {
+    line-height: 1;
+  }
+</style>

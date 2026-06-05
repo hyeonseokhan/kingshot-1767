@@ -1,100 +1,74 @@
 ---
-// 캐슬 전투 페이지 — 정적 시안 단계 (mockup 그대로 포팅).
-// _battlefield.html / _dialog.html: 메인 마크업 (mockup 에서 추출, 이미지 경로만 /castle-battle/ 로 재작성).
-// 후속: Supabase 연동 (cb_rounds / cb_targets / cb_candidates / cb_votes + castle-battle EF).
+// 캐슬 전투 — 메인 페이지 (실 DB 조회).
+//
+// Phase 1: 조회 전용 — cb_* 테이블에서 회차/거점/후보/표 가져와 카드 렌더.
+// 다이얼로그/투표 액션은 후속 Phase 에서.
+//
+// 데이터 흐름:
+//   1) getActiveRound() — 현재 활성 회차 (status != archived)
+//   2) (선택) AUTH_KEY 에서 내 kingshot_id 확인 → my_vote / is_mine 표시
+//   3) getTargetsWithCandidates(round.id, myId) — 거점 + 후보 + 표 집계
+//   4) Battlefield 컴포넌트 에 전달
+//
+// 회차 미개최 시: 안내 화면.
+
 import CastleBattleLayout from '@/layouts/CastleBattleLayout.astro';
-import battlefieldHtml from './_battlefield.html?raw';
-import dialogHtml from './_dialog.html?raw';
+import RoundHero from '@/components/castle-battle/RoundHero.astro';
+import Battlefield from '@/components/castle-battle/Battlefield.astro';
+import { getActiveRound, getTargetsWithCandidates } from '@/lib/castle-battle/queries';
 import '@/styles/castle-battle.css';
+
+const round = await getActiveRound();
+// SSR 시점엔 사용자 인증 정보 X — 클라이언트 측 hydration 후 본인 표 강조하려면
+// 별도 API/realtime 필요. Phase 1 은 anon view 만 (my_vote 모두 null).
+const targets = round ? await getTargetsWithCandidates(round.id, null) : [];
+const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
 ---
 
 <CastleBattleLayout
   title="캐슬 전투 — 1767 서버 허브"
   description="캐슬 전투 회차별 거점 점령 집결자 예측 투표"
 >
-  {/* 운영자 popover — 헤더의 header-actions slot 으로 주입.
-       SSR 기본 hidden — 로그인 사용자의 kingshot_id 가 ADMIN_IDS 에 포함될 때만
-       하단 인라인 스크립트가 hidden 해제. */}
-  <details class="cb-admin-pop" id="cb-admin-pop-root" slot="header-actions" hidden>
-    <summary>🛠 운영자</summary>
-    <div class="cb-admin-pop-panel">
-      <div class="cb-admin-pop-head">🛠️ 운영자 패널</div>
-      <div class="cb-admin-pop-body">
-        <div class="cb-admin-group">
-          <div class="cb-admin-group-label">회차 상태</div>
-          <div class="cb-admin-group-actions">
-            <button class="cb-btn cb-btn-sm">투표 마감</button>
-            <button class="cb-btn cb-btn-secondary cb-btn-sm" disabled style="opacity:0.4"
-              >결과 입력 단계로</button
-            >
-          </div>
-        </div>
-        <div class="cb-admin-group">
-          <div class="cb-admin-group-label">집결자 등록</div>
-          <div class="cb-admin-group-actions">
-            <button class="cb-btn cb-btn-sm">+ 후보 추가</button>
-            <button class="cb-btn cb-btn-secondary cb-btn-sm">연맹 관리</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </details>
-
-  <section class="cb-hero">
-    <div class="cb-hero-eyebrow">— Round 7 —</div>
-    <h1 class="cb-hero-title">2026-05-31 캐슬 전투</h1>
-    <div class="cb-hero-meta">
-      <span class="cb-hero-meta-item">📅 5월 31일(토) 20:00</span>
-      <span class="cb-hero-meta-dot"></span>
-      <span class="cb-hero-meta-item">👥 124명 참여</span>
-      <span class="cb-hero-meta-dot"></span>
-      <span class="cb-hero-meta-item">⏱ 마감까지 02:14:32</span>
-    </div>
-    <div><span class="cb-status-badge cb-status-voting">투표 진행 중</span></div>
-  </section>
-
-  <Fragment set:html={battlefieldHtml} />
-  <Fragment set:html={dialogHtml} />
-
-  <script>
-    import '@/scripts/pages/castle-battle';
-    // 'app-open-auth' 는 BaseLayout 의 공용 AuthDialog 가 처리 — 캐슬에서도 동일.
-
-    // === 운영자 게이트 ===
-    // 추후 cb_admins 테이블 (CLAUDE.md NEW_SERVICE.md 데이터 모델) 으로 이관 예정 —
-    // 현재는 클라이언트측 화이트리스트 (mockup 단계).
-    const ADMIN_IDS: ReadonlyArray<string> = ['270680423'];
-    const AUTH_KEY = 'pnx-sk-auth-v1';
-
-    function isAdmin(): boolean {
-      try {
-        const raw = localStorage.getItem(AUTH_KEY);
-        if (!raw) return false;
-        const obj = JSON.parse(raw);
-        const id: string | undefined = obj?.record?.kingshot_id;
-        return typeof id === 'string' && ADMIN_IDS.includes(id);
-      } catch {
-        return false;
-      }
-    }
-    function syncAdminGate(): void {
-      const root = document.getElementById('cb-admin-pop-root');
-      if (!root) return;
-      if (isAdmin()) root.removeAttribute('hidden');
-      else root.setAttribute('hidden', '');
-    }
-    document.addEventListener('app-auth-changed', syncAdminGate);
-    window.addEventListener('storage', (e) => {
-      if (e.key === AUTH_KEY) syncAdminGate();
-    });
-    syncAdminGate();
-  </script>
+  {round ? (
+    <>
+      <RoundHero round={round} roundIndex={round.id} totalVotes={totalVotes} />
+      <Battlefield targets={targets} />
+    </>
+  ) : (
+    <section class="cb-empty-round">
+      <div class="cb-empty-icon">🏰</div>
+      <h2 class="cb-empty-title">진행 중인 회차가 없습니다</h2>
+      <p class="cb-empty-body">
+        다음 캐슬 전투 회차가 개최되면 이 곳에서 거점별 집결자 예측 투표가 시작됩니다.
+      </p>
+    </section>
+  )}
 </CastleBattleLayout>
 
 <style is:global>
-  /* 헤더 안 cb-admin-pop summary: header 의 다른 actions (AuthButton/LangSwitcher) 와 같은 결로 보정. */
-  .app-header-actions > .cb-admin-pop > summary {
-    padding: 5px 10px;
-    font-size: 12.5px;
+  .cb-empty-round {
+    max-width: 480px;
+    margin: 80px auto;
+    padding: 32px 24px;
+    text-align: center;
+    background: var(--cb-surface);
+    border: 1px solid var(--cb-border);
+    border-radius: 12px;
+  }
+  .cb-empty-icon {
+    font-size: 48px;
+    margin-bottom: 12px;
+  }
+  .cb-empty-title {
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--cb-text);
+    margin: 0 0 8px;
+  }
+  .cb-empty-body {
+    font-size: 13px;
+    color: var(--cb-text-dim);
+    line-height: 1.6;
+    margin: 0;
   }
 </style>
