@@ -377,8 +377,11 @@
   }
 
   /* === 후보 리스트 (스크롤) === */
+  /* min-height: 0 — flex column 자식이 overflow 로 스크롤 되게 하는 필수 조건.
+     없으면 컨텐츠 size 로 자라서 overflow 무력화 → 카드 자체가 길어짐. */
   .cb-cands {
     flex: 1;
+    min-height: 0;
     padding: 8px 10px 12px;
     overflow-y: auto;
     display: flex;
@@ -601,10 +604,13 @@
   }
   .cb-dialog-close:hover { background: rgba(0, 0, 0, 0.78); }
 
-  /* body */
+  /* body — voter 펼치기로 컨텐츠 늘어나면 내부 스크롤. dialog 자체 height: 680px 고정.
+     min-height: 0 필수 — flex column 자식이 overflow scroll 되려면. */
   .cb-dialog-body {
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
+    overscroll-behavior: contain;
     padding: 14px 16px;
     display: flex; flex-direction: column;
     gap: 8px;
