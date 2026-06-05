@@ -3,7 +3,7 @@
  *
  * 인증 모델:
  *   - 일반 사용자 액션: 매 호출마다 (player_id, pin) 동봉 → verifyAuth 로 PIN 검증.
- *   - 운영자 액션: PIN 검증 후 cb_admins 화이트리스트 확인.
+ *   - 운영자 액션: PIN 검증 후 members.is_admin 컬럼 확인 (cb_admins 테이블 제거됨).
  *
  * 액션 (사용자):
  *   { action: 'get-current-round' }                                  → { ok, round?, targets[], candidates[], votes_counts[] }
@@ -11,6 +11,9 @@
  *   { action: 'my-votes', player_id, pin, round_id }                 → { ok, votes[] }
  *
  * 액션 (운영자):
+ *   { action: 'admin-setup-round', player_id, pin, title, event_starts_at, memo?,
+ *             targets: [{slot, is_open, candidates:[{alliance_tag, alliance_name?, rallier_nickname, kingshot_id?}]}] }
+ *                                                                      → { ok, round_id }
  *   { action: 'admin-create-round',     player_id, pin, title, event_starts_at, memo? }  → { ok, round_id }
  *   { action: 'admin-set-round-status', player_id, pin, round_id, status }                → { ok }
  *   { action: 'admin-set-target-open',  player_id, pin, target_id, is_open }              → { ok }
@@ -158,7 +161,7 @@ interface AuthResult {
   is_admin: boolean;
 }
 
-/** PIN 검증 → 멤버 정보 + is_admin 반환. is_admin 은 cb_admins 화이트리스트에서 판정 (members.is_admin 과 별개). */
+/** PIN 검증 → 멤버 정보 + is_admin 반환. is_admin 은 members.is_admin 컬럼 사용. */
 async function verifyAuth(playerId: unknown, pin: unknown): Promise<AuthResult> {
   if (!isValidPlayerId(playerId)) throw new Error("invalid_player_id");
   if (!isValidPin(pin)) throw new Error("invalid_pin");
@@ -172,18 +175,14 @@ async function verifyAuth(playerId: unknown, pin: unknown): Promise<AuthResult> 
   if (computed !== cred.pin_hash) throw new Error("wrong_pin");
 
   const member = await dbSelectOne(
-    `members?kingshot_id=eq.${encodeURIComponent(playerId)}&select=kingshot_id,nickname`,
+    `members?kingshot_id=eq.${encodeURIComponent(playerId)}&select=kingshot_id,nickname,is_admin`,
   );
   if (!member) throw new Error("not_registered");
-
-  const adminRow = await dbSelectOne(
-    `cb_admins?kingshot_id=eq.${encodeURIComponent(playerId)}&select=kingshot_id`,
-  );
 
   return {
     player_id: member.kingshot_id,
     nickname: member.nickname,
-    is_admin: adminRow != null,
+    is_admin: !!member.is_admin,
   };
 }
 
@@ -261,11 +260,85 @@ async function adminCreateRound(
   ) as any[];
   const roundId = round[0].id as number;
 
-  // 5 거점 INSERT (slot 고정 순서: castle → turret_11 → turret_2 → turret_5 → turret_7)
-  const SLOTS = ["castle", "turret_11", "turret_2", "turret_5", "turret_7"];
+  // 5 거점 INSERT (cardinal 슬롯명)
+  const SLOTS = ["castle", "turret_north", "turret_east", "turret_south", "turret_west"];
   for (const slot of SLOTS) {
     await dbInsert("cb_targets", { round_id: roundId, slot });
   }
+  return { ok: true, round_id: roundId };
+}
+
+/**
+ * admin-setup-round: 회차 + 거점 설정 + 후보 등록을 한 번에 처리.
+ * targets 배열의 각 항목: { slot, is_open, candidates?: [{alliance_tag, alliance_name?, rallier_nickname, kingshot_id?}] }
+ * 연맹은 tag 기준으로 upsert — 없으면 name(없으면 tag)으로 신규 생성.
+ */
+async function adminSetupRound(
+  playerId: unknown,
+  pin: unknown,
+  title: unknown,
+  eventStartsAt: unknown,
+  memo: unknown,
+  targets: unknown,
+) {
+  const me = await requireAdmin(playerId, pin);
+  if (typeof title !== "string" || title.length === 0 || title.length > 200) throw new Error("missing_field");
+  if (typeof eventStartsAt !== "string" || !eventStartsAt) throw new Error("missing_field");
+
+  const round = await dbInsert(
+    "cb_rounds",
+    {
+      title,
+      event_starts_at: eventStartsAt,
+      memo: typeof memo === "string" ? memo : null,
+      created_by: me.player_id,
+    },
+    true,
+  ) as any[];
+  const roundId = round[0].id as number;
+
+  const SLOTS = ["castle", "turret_north", "turret_east", "turret_south", "turret_west"];
+  const targetsArr = Array.isArray(targets) ? targets : [];
+
+  for (const slot of SLOTS) {
+    const cfg = targetsArr.find((t: any) => t.slot === slot);
+    const isOpen = cfg ? !!cfg.is_open : true;
+    const targetRow = await dbInsert("cb_targets", { round_id: roundId, slot, is_open: isOpen }, true) as any[];
+    const targetId = targetRow[0].id as number;
+
+    if (!isOpen || !Array.isArray(cfg?.candidates)) continue;
+
+    let order = 1;
+    for (const cand of cfg.candidates) {
+      if (!cand?.rallier_nickname || !cand?.alliance_tag) continue;
+
+      // 연맹 조회 또는 생성
+      let alliance = await dbSelectOne(
+        `cb_alliances?tag=eq.${encodeURIComponent(cand.alliance_tag)}&select=id`,
+      );
+      if (!alliance) {
+        const newA = await dbInsert(
+          "cb_alliances",
+          { tag: cand.alliance_tag, name: cand.alliance_name || cand.alliance_tag },
+          true,
+        ) as any[];
+        alliance = { id: newA[0].id };
+      }
+
+      try {
+        await dbInsert("cb_candidates", {
+          target_id: targetId,
+          alliance_id: alliance.id,
+          rallier_nickname: cand.rallier_nickname,
+          kingshot_id: typeof cand.kingshot_id === "string" && cand.kingshot_id ? cand.kingshot_id : null,
+          display_order: order++,
+        });
+      } catch {
+        // 중복 후보 무시
+      }
+    }
+  }
+
   return { ok: true, round_id: roundId };
 }
 
@@ -579,6 +652,11 @@ Deno.serve(async (req: Request) => {
         break;
 
       // 운영자
+      case "admin-setup-round":
+        result = await adminSetupRound(
+          body.player_id, body.pin, body.title, body.event_starts_at, body.memo, body.targets,
+        );
+        break;
       case "admin-create-round":
         result = await adminCreateRound(body.player_id, body.pin, body.title, body.event_starts_at, body.memo);
         break;
