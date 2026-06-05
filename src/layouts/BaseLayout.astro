@@ -80,13 +80,16 @@ const {
         font-family: var(--font);
         line-height: 1.5;
         font-size: 14px;
+        /* global.css 의 body { height: 100vh; overflow: hidden } 잔재 override —
+           1767 사이트는 콘텐츠 길이에 따라 자연스럽게 늘어나야 함 (footer 가
+           overflow 뒤로 가려지는 이슈 방지). */
+        height: auto;
         min-height: 100vh;
         min-height: 100dvh;
         display: flex;
         flex-direction: column;
         margin: 0;
-        overflow-y: auto;
-        overflow-x: hidden;
+        overflow: visible;
       }
       .app-main {
         flex: 1;
