@@ -9,6 +9,7 @@
 import '@/styles/global.css';
 import '@/styles/components.css';
 import Header from '@/components/Header.astro';
+import AuthDialog from '@/components/AuthDialog.astro';
 
 interface Props {
   title?: string;
@@ -61,6 +62,7 @@ const {
     <main class:list={['app-main', mainClass]}>
       <slot />
     </main>
+    <AuthDialog />
     <footer class="app-footer">
       <div class="app-footer-inner">
         <span class="app-footer-tagline" data-i18n="footer.tagline"

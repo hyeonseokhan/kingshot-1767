@@ -857,14 +857,7 @@ import '@/styles/kvk-survey/buff.css';
 
   <script>
     import '@/scripts/pages/survey';
-    // 헤더의 AuthButton 이 dispatch 한 이벤트 수신 → 기존 sk-auth-dialog 활성화.
-    // survey-kvk.ts 의 내부 상태(step toggle 등) 초기화 없이 showModal() 만 호출 —
-    // 사용자가 ID 부터 다시 입력하는 흐름.
-    document.addEventListener('app-open-auth', () => {
-      const dlg = document.getElementById('sk-auth-dialog') as HTMLDialogElement | null;
-      if (dlg && typeof dlg.showModal === 'function' && !dlg.open) {
-        dlg.showModal();
-      }
-    });
+    // 'app-open-auth' 는 BaseLayout 의 공용 AuthDialog 가 처리.
+    // sk-auth-dialog 는 KvK 의 [등록/수정] 흐름(TC 레벨 게이트 포함)에만 사용 유지.
   </script>
 </SurveyLayout>

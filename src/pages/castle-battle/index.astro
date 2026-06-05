@@ -56,11 +56,7 @@ import '@/styles/castle-battle.css';
 
   <script>
     import '@/scripts/pages/castle-battle';
-    // 헤더 AuthButton — 캐슬 전투의 실제 인증 다이얼로그는 후속 작업 (현재는 mockup 상태).
-    // KvK 와 동일 PIN 인증 인프라(tile-match-auth EF)를 공유하므로 향후 통합 다이얼로그로 이관 예정.
-    document.addEventListener('app-open-auth', () => {
-      alert('캐슬 전투 인증 다이얼로그는 준비 중입니다. KvK 설문에서 동일 인증을 사용할 수 있어요.');
-    });
+    // 'app-open-auth' 는 BaseLayout 의 공용 AuthDialog 가 처리 — 캐슬에서도 동일.
   </script>
 </CastleBattleLayout>
 

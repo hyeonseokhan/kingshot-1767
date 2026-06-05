@@ -1,0 +1,352 @@
+---
+// 전역 인증 다이얼로그 — BaseLayout 에 포함, 모든 페이지에서 동일 동작.
+//
+// 트리거: 'app-open-auth' 커스텀 이벤트 (AuthButton 등이 dispatch).
+// 흐름:
+//   Step 1: 킹샷 ID 입력 → 'lookup' EF 호출
+//   Step 2: PIN 4자리 입력 → 'login' EF 호출 → token 발급 → AUTH_KEY 저장
+//
+// 결과:
+//   - 인증 성공 → AUTH_KEY(localStorage) 갱신 + 'app-auth-changed' dispatch
+//     → AuthButton / 각 페이지가 자동으로 인증 상태 동기화
+//
+// 신규 사용자 (미등록 PIN):
+//   - "KvK 설문에서 첫 등록 후 사용해 주세요" 안내 + /survey/ 로 이동 옵션
+//   - 이유: 신규 등록은 도시 레벨 / 폼 데이터 등 컨텍스트가 필요
+---
+
+<dialog class="app-auth" id="app-auth-dialog" aria-labelledby="app-auth-title">
+  <div class="app-auth-card">
+    <header class="app-auth-head">
+      <strong id="app-auth-title" data-i18n="header.auth">계정 인증</strong>
+      <button type="button" class="app-auth-close" id="app-auth-close" aria-label="Close">&times;</button>
+    </header>
+
+    <div class="app-auth-body">
+      {/* Step 1: ID 입력 */}
+      <div class="app-auth-step" id="app-auth-step-id">
+        <label class="app-auth-label" for="app-auth-id-input">킹샷 ID</label>
+        <div class="app-auth-input-row">
+          <input
+            type="text"
+            id="app-auth-id-input"
+            inputmode="numeric"
+            autocomplete="off"
+            placeholder="예: 270680423"
+          />
+          <button type="button" class="app-auth-btn-primary" id="app-auth-id-search">조회</button>
+        </div>
+        <div class="app-auth-status" id="app-auth-id-status" role="status" aria-live="polite"></div>
+      </div>
+
+      {/* Step 2: PIN 확인 (인증된 사용자) */}
+      <div class="app-auth-step" id="app-auth-step-pin" hidden>
+        <div class="app-auth-player">
+          <div class="app-auth-photo-wrap">
+            <div class="app-auth-photo-empty" id="app-auth-photo-empty">?</div>
+            <img class="app-auth-photo" id="app-auth-photo" src="" alt="" hidden />
+          </div>
+          <div class="app-auth-player-meta">
+            <div class="app-auth-player-name" id="app-auth-player-name">-</div>
+            <div class="app-auth-player-id" id="app-auth-player-id">-</div>
+          </div>
+        </div>
+        <p class="app-auth-help">등록한 PIN 4자리를 입력해 주세요.</p>
+        <div class="app-auth-pin-wrap">
+          <input
+            class="app-auth-pin-input"
+            id="app-auth-pin-input"
+            type="text"
+            inputmode="numeric"
+            pattern="[0-9]*"
+            maxlength="4"
+            autocomplete="off"
+            autocapitalize="off"
+            autocorrect="off"
+            spellcheck="false"
+            aria-label="PIN 4자리 입력"
+          />
+          <div class="app-auth-pin-boxes" aria-hidden="true">
+            <div class="app-auth-pin-box"></div>
+            <div class="app-auth-pin-box"></div>
+            <div class="app-auth-pin-box"></div>
+            <div class="app-auth-pin-box"></div>
+          </div>
+        </div>
+        <div class="app-auth-status" id="app-auth-pin-status" role="status" aria-live="polite"></div>
+        <div class="app-auth-actions">
+          <button type="button" class="app-auth-btn-secondary" id="app-auth-back">뒤로</button>
+        </div>
+      </div>
+
+      {/* Step 3: 신규 사용자 안내 (lookup 응답이 registered:false) */}
+      <div class="app-auth-step" id="app-auth-step-new" hidden>
+        <div class="app-auth-new-icon">👋</div>
+        <h4 class="app-auth-new-title">처음 오셨네요!</h4>
+        <p class="app-auth-new-body">
+          신규 등록은 <strong>KvK 설문</strong> 페이지의 [등록 / 수정] 에서 진행해 주세요.
+          첫 등록 후 이 곳에서 PIN 만으로 빠른 로그인이 가능합니다.
+        </p>
+        <div class="app-auth-actions">
+          <button type="button" class="app-auth-btn-secondary" id="app-auth-new-back">뒤로</button>
+          <a class="app-auth-btn-primary" href="/survey/" id="app-auth-new-go">KvK 설문으로 이동 →</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</dialog>
+
+<script>
+  import '@/scripts/components/auth-dialog';
+</script>
+
+<style>
+  /* ⚠️ CLAUDE.md UI 룰: 다이얼로그는 항상 화면 중앙. inset + margin auto 명시. */
+  .app-auth {
+    position: fixed;
+    inset: 0;
+    margin: auto;
+    width: 360px;
+    max-width: calc(100vw - 32px);
+    max-height: 86vh;
+    padding: 0;
+    border: none;
+    border-radius: 12px;
+    background: var(--brand-surface);
+    color: var(--brand-text);
+    box-shadow: 0 20px 50px rgba(15, 23, 42, 0.30);
+    overflow: hidden;
+  }
+  .app-auth::backdrop {
+    background: rgba(15, 23, 42, 0.55);
+    backdrop-filter: blur(4px);
+  }
+
+  .app-auth-card {
+    display: flex;
+    flex-direction: column;
+  }
+  .app-auth-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--brand-border);
+    background: var(--brand-surface-2);
+  }
+  .app-auth-head strong {
+    font-size: 14px;
+    color: var(--brand-text);
+  }
+  .app-auth-close {
+    background: none;
+    border: none;
+    font-size: 22px;
+    color: var(--brand-text-dim);
+    cursor: pointer;
+    line-height: 1;
+    padding: 0 4px;
+    transition: color 0.15s;
+  }
+  .app-auth-close:hover { color: var(--brand-text); }
+
+  .app-auth-body {
+    padding: 18px 18px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .app-auth-step { display: flex; flex-direction: column; gap: 10px; }
+  .app-auth-step[hidden] { display: none; }
+
+  .app-auth-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--brand-text-dim);
+    letter-spacing: 0.04em;
+  }
+  .app-auth-input-row {
+    display: flex;
+    gap: 8px;
+  }
+  .app-auth-input-row input {
+    flex: 1;
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--brand-border);
+    background: var(--brand-surface);
+    color: var(--brand-text);
+    font: inherit;
+    font-size: 13px;
+    transition: border-color 0.15s;
+  }
+  .app-auth-input-row input:focus {
+    border-color: var(--brand-accent);
+    outline: 2px solid rgba(124, 58, 237, 0.20);
+  }
+
+  .app-auth-btn-primary,
+  .app-auth-btn-secondary {
+    padding: 7px 14px;
+    border-radius: 6px;
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, filter 0.15s;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .app-auth-btn-primary {
+    background: var(--brand-accent);
+    color: #fff;
+    border: 1px solid var(--brand-accent);
+  }
+  .app-auth-btn-primary:hover { filter: brightness(1.08); text-decoration: none; }
+  .app-auth-btn-primary:disabled {
+    background: rgba(15, 23, 42, 0.06);
+    border-color: var(--brand-border);
+    color: var(--brand-text-dim);
+    cursor: not-allowed;
+  }
+  .app-auth-btn-secondary {
+    background: rgba(15, 23, 42, 0.04);
+    color: var(--brand-text);
+    border: 1px solid var(--brand-border-strong);
+  }
+  .app-auth-btn-secondary:hover { background: rgba(15, 23, 42, 0.08); }
+
+  .app-auth-status {
+    font-size: 11.5px;
+    line-height: 1.5;
+    min-height: 17px;
+    color: var(--brand-text-dim);
+  }
+  .app-auth-status.is-err { color: var(--brand-danger); }
+  .app-auth-status.is-ok { color: var(--brand-success); }
+
+  /* player card */
+  .app-auth-player {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--brand-surface-2);
+    border: 1px solid var(--brand-border);
+    border-radius: 8px;
+  }
+  .app-auth-photo-wrap {
+    position: relative;
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
+  }
+  .app-auth-photo {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+  }
+  .app-auth-photo-empty {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--brand-accent-bright), var(--brand-accent));
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    font-weight: 800;
+  }
+  .app-auth-player-meta { min-width: 0; }
+  .app-auth-player-name {
+    font-size: 14px;
+    font-weight: 800;
+    color: var(--brand-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .app-auth-player-id {
+    font-size: 11px;
+    color: var(--brand-text-dim);
+  }
+
+  .app-auth-help {
+    font-size: 12px;
+    color: var(--brand-text-dim);
+    margin: 4px 0 2px;
+  }
+
+  /* PIN 4박스 */
+  .app-auth-pin-wrap {
+    position: relative;
+    height: 48px;
+  }
+  .app-auth-pin-input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    border: 0;
+    background: transparent;
+    z-index: 1;
+    font: inherit;
+    cursor: text;
+  }
+  .app-auth-pin-boxes {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    pointer-events: none;
+  }
+  .app-auth-pin-box {
+    height: 48px;
+    border-radius: 8px;
+    border: 1px solid var(--brand-border-strong);
+    background: var(--brand-surface);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--brand-text);
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .app-auth-pin-box.is-filled { color: var(--brand-accent); }
+  .app-auth-pin-box.is-active {
+    border-color: var(--brand-accent);
+    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
+  }
+
+  .app-auth-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 4px;
+  }
+
+  /* Step 3: 신규 안내 */
+  .app-auth-new-icon {
+    text-align: center;
+    font-size: 36px;
+    line-height: 1;
+    margin-top: 6px;
+  }
+  .app-auth-new-title {
+    text-align: center;
+    font-size: 16px;
+    font-weight: 800;
+    color: var(--brand-text);
+    margin: 0;
+  }
+  .app-auth-new-body {
+    font-size: 12.5px;
+    color: var(--brand-text-dim);
+    line-height: 1.6;
+    text-align: center;
+  }
+  .app-auth-new-body strong { color: var(--brand-accent); }
+</style>
