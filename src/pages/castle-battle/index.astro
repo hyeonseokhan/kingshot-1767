@@ -191,6 +191,10 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
 
   // ─── 슬롯 렌더 ───────────────────────────────────────────────
 
+  function esc(str: string): string {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
   function buildSlotCard(slotDef: typeof SLOTS[number]): HTMLElement {
     const card = document.createElement('div');
     card.className = 'cb-nr-slot';
@@ -205,98 +209,75 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
         </label>
       </div>
       <div class="cb-nr-cands ${slotDef.defaultOpen ? '' : 'is-hidden'}">
-        <div class="cb-nr-cand-list"></div>
-        <button class="cb-nr-add-cand" type="button">＋ 후보 추가</button>
+        <div class="cb-nr-badge-list"></div>
+        <div class="cb-nr-form">
+          <div class="cb-nr-form-inputs">
+            <input class="cb-nr-input cb-nr-f-tag" type="text" placeholder="연맹 (PNX)" maxlength="20" />
+            <input class="cb-nr-input cb-nr-f-ksid" type="tel" placeholder="킹샷 ID" maxlength="15" pattern="[0-9]*" />
+            <button class="cb-nr-lookup-btn" type="button">조회</button>
+          </div>
+          <div class="cb-nr-form-preview" hidden>
+            <div class="cb-nr-preview-row">
+              <div class="cb-nr-badge">
+                <span class="cb-nr-badge-avatar">
+                  <img class="cb-nr-badge-img" alt="" hidden />
+                  <span class="cb-nr-badge-initial"></span>
+                </span>
+                <span class="cb-nr-badge-nick"></span>
+              </div>
+              <button class="cb-nr-add-btn" type="button">후보 등록</button>
+            </div>
+          </div>
+          <span class="cb-nr-lookup-err"></span>
+        </div>
       </div>
     `;
 
     const chk = card.querySelector('.cb-nr-open-chk') as HTMLInputElement;
     const cands = card.querySelector('.cb-nr-cands') as HTMLElement;
+    chk.addEventListener('change', () => cands.classList.toggle('is-hidden', !chk.checked));
 
-    chk.addEventListener('change', () => {
-      cands.classList.toggle('is-hidden', !chk.checked);
-    });
+    const tagInput = card.querySelector('.cb-nr-f-tag') as HTMLInputElement;
+    const ksidInput = card.querySelector('.cb-nr-f-ksid') as HTMLInputElement;
+    const lookupBtn = card.querySelector('.cb-nr-lookup-btn') as HTMLButtonElement;
+    const previewEl = card.querySelector('.cb-nr-form-preview') as HTMLElement;
+    const badgeImg = card.querySelector('.cb-nr-badge-img') as HTMLImageElement;
+    const badgeInitial = card.querySelector('.cb-nr-badge-initial') as HTMLElement;
+    const badgeNick = card.querySelector('.cb-nr-badge-nick') as HTMLElement;
+    const lookupErr = card.querySelector('.cb-nr-lookup-err') as HTMLElement;
+    const addBtn = card.querySelector('.cb-nr-add-btn') as HTMLButtonElement;
+    const badgeList = card.querySelector('.cb-nr-badge-list') as HTMLElement;
 
-    const addBtn = card.querySelector('.cb-nr-add-cand') as HTMLButtonElement;
-    addBtn.addEventListener('click', () => addCandidateRow(card));
+    let fetched: { nickname: string; profile_photo: string } | null = null;
 
-    return card;
-  }
-
-  function addCandidateRow(slotCard: HTMLElement): void {
-    const list = slotCard.querySelector('.cb-nr-cand-list') as HTMLElement;
-    const row = document.createElement('div');
-    row.className = 'cb-nr-cand-wrap';
-    row.innerHTML = `
-      <div class="cb-nr-cand-row">
-        <input class="cb-nr-input cb-nr-cand-tag" type="text" placeholder="연맹 (PNX)" maxlength="20" />
-        <input class="cb-nr-input cb-nr-cand-ksid" type="tel" placeholder="킹샷 ID" maxlength="15" pattern="[0-9]*" />
-        <button class="cb-nr-lookup-btn" type="button">조회</button>
-        <button class="cb-nr-cand-del" type="button" title="삭제">✕</button>
-      </div>
-      <div class="cb-nr-cand-result" hidden>
-        <div class="cb-nr-badge">
-          <span class="cb-nr-badge-avatar">
-            <img class="cb-nr-badge-img" alt="" hidden />
-            <span class="cb-nr-badge-initial"></span>
-          </span>
-          <span class="cb-nr-badge-nick"></span>
-        </div>
-        <span class="cb-nr-cand-err"></span>
-      </div>
-    `;
-
-    row.querySelector('.cb-nr-cand-del')!.addEventListener('click', () => row.remove());
-
-    const lookupBtn = row.querySelector('.cb-nr-lookup-btn') as HTMLButtonElement;
-    const ksidInput = row.querySelector('.cb-nr-cand-ksid') as HTMLInputElement;
-    const resultEl = row.querySelector('.cb-nr-cand-result') as HTMLElement;
-    const badge = row.querySelector('.cb-nr-badge') as HTMLElement;
-    const badgeImg = row.querySelector('.cb-nr-badge-img') as HTMLImageElement;
-    const badgeInitial = row.querySelector('.cb-nr-badge-initial') as HTMLElement;
-    const badgeNick = row.querySelector('.cb-nr-badge-nick') as HTMLElement;
-    const errEl = row.querySelector('.cb-nr-cand-err') as HTMLElement;
-
+    // ─ 조회 ─
     lookupBtn.addEventListener('click', async () => {
       const ksid = ksidInput.value.trim();
-      if (!/^\d{4,15}$/.test(ksid)) {
-        ksidInput.focus();
-        return;
-      }
+      if (!/^\d{4,15}$/.test(ksid)) { ksidInput.focus(); return; }
       lookupBtn.disabled = true;
       lookupBtn.textContent = '...';
-      row.dataset.nickname = '';
-      row.dataset.profilePhoto = '';
-      badge.hidden = true;
-      errEl.textContent = '';
-      resultEl.hidden = true;
+      fetched = null;
+      previewEl.hidden = true;
+      lookupErr.textContent = '';
 
       try {
         const res = await callFn({ action: 'lookup-player', kingshot_id: ksid });
-        resultEl.hidden = false;
         if (res.ok) {
-          const nick: string = res.nickname ?? '';
-          const photo: string = res.profile_photo ?? '';
-          row.dataset.nickname = nick;
-          row.dataset.profilePhoto = photo;
-
-          // 아바타 — 이미지 or 이니셜
-          if (photo) {
-            badgeImg.src = photo;
+          fetched = { nickname: res.nickname ?? '', profile_photo: res.profile_photo ?? '' };
+          if (fetched.profile_photo) {
+            badgeImg.src = fetched.profile_photo;
             badgeImg.hidden = false;
             badgeInitial.hidden = true;
           } else {
             badgeImg.hidden = true;
-            badgeInitial.textContent = nick.charAt(0).toUpperCase() || '?';
-            badgeInitial.hidden = false;
+            badgeInitial.textContent = (fetched.nickname.charAt(0) || '?').toUpperCase();
+            (badgeInitial as HTMLElement).hidden = false;
           }
-          badgeNick.textContent = nick;
-          badge.hidden = false;
-          errEl.textContent = '';
+          badgeNick.textContent = fetched.nickname;
+          previewEl.hidden = false;
           lookupBtn.textContent = '재조회';
         } else {
-          badge.hidden = true;
-          errEl.textContent = '플레이어를 찾을 수 없습니다';
+          lookupErr.textContent = '플레이어를 찾을 수 없습니다';
           lookupBtn.textContent = '조회';
         }
       } catch {
@@ -306,7 +287,46 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
       }
     });
 
-    list.appendChild(row);
+    // ─ 후보 등록 ─
+    addBtn.addEventListener('click', () => {
+      const tag = tagInput.value.trim();
+      if (!tag) { tagInput.focus(); return; }
+      if (!fetched) return;
+
+      const ksid = ksidInput.value.trim();
+      const photoSrc = fetched.profile_photo;
+      const nick = fetched.nickname;
+
+      const item = document.createElement('div');
+      item.className = 'cb-nr-cand-badge';
+      item.dataset.tag = tag;
+      item.dataset.nick = nick;
+      item.dataset.ksid = ksid;
+      item.dataset.photo = photoSrc;
+
+      const avatarHtml = photoSrc
+        ? `<img class="cb-nr-badge-img" src="${esc(photoSrc)}" alt="" />`
+        : `<span class="cb-nr-badge-initial">${esc(nick.charAt(0).toUpperCase() || '?')}</span>`;
+
+      item.innerHTML = `
+        <span class="cb-nr-badge-avatar">${avatarHtml}</span>
+        <span class="cb-nr-badge-tag">${esc(tag)}</span>
+        <span class="cb-nr-badge-nick">${esc(nick)}</span>
+        <button class="cb-nr-badge-remove" type="button" title="제거">✕</button>
+      `;
+      item.querySelector('.cb-nr-badge-remove')!.addEventListener('click', () => item.remove());
+      badgeList.appendChild(item);
+
+      // 폼 초기화
+      tagInput.value = '';
+      ksidInput.value = '';
+      fetched = null;
+      previewEl.hidden = true;
+      lookupBtn.textContent = '조회';
+      tagInput.focus();
+    });
+
+    return card;
   }
 
   // ─── 다이얼로그 열기/닫기 ────────────────────────────────────
@@ -374,22 +394,12 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
       const candidates: Candidate[] = [];
 
       if (isOpen) {
-        card.querySelectorAll<HTMLElement>('.cb-nr-cand-wrap').forEach((wrap) => {
-          const tag = (wrap.querySelector('.cb-nr-cand-tag') as HTMLInputElement).value.trim();
-          const ksid = (wrap.querySelector('.cb-nr-cand-ksid') as HTMLInputElement).value.trim();
-          const nickname = wrap.dataset.nickname ?? '';
-          const profilePhoto = wrap.dataset.profilePhoto ?? '';
-
-          if (!tag && !ksid) return; // 빈 행 무시
-          if (!tag) { errEl.textContent = '연맹 태그를 입력해 주세요.'; hasError = true; return; }
-          if (!ksid) { errEl.textContent = '킹샷 ID를 입력해 주세요.'; hasError = true; return; }
-          if (!nickname) { errEl.textContent = `킹샷 ID ${ksid} 을 조회해 주세요.`; hasError = true; return; }
-
+        card.querySelectorAll<HTMLElement>('.cb-nr-cand-badge').forEach((badge) => {
           candidates.push({
-            alliance_tag: tag,
-            rallier_nickname: nickname,
-            kingshot_id: ksid,
-            profile_photo: profilePhoto || undefined,
+            alliance_tag: badge.dataset.tag!,
+            rallier_nickname: badge.dataset.nick!,
+            kingshot_id: badge.dataset.ksid || undefined,
+            profile_photo: badge.dataset.photo || undefined,
           });
         });
       }
