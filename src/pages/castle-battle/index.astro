@@ -87,12 +87,9 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
         {/* 기본 정보 */}
         <div class="cb-nr-section">
           <div class="cb-nr-field">
-            <label class="cb-nr-label" for="cb-nr-title-input">회차 제목</label>
-            <input class="cb-nr-input" id="cb-nr-title-input" type="text" maxlength="100"
-              placeholder="예: 2026-06-05 캐슬 전투" />
-          </div>
-          <div class="cb-nr-field">
-            <label class="cb-nr-label" for="cb-nr-date-input">이벤트 시작 일시</label>
+            <label class="cb-nr-label" for="cb-nr-date-input">
+              이벤트 시작 일시 <span class="cb-nr-label-note">KST 기준</span>
+            </label>
             <input class="cb-nr-input" id="cb-nr-date-input" type="datetime-local" />
           </div>
         </div>
@@ -162,11 +159,11 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
   const FN_URL = SUPABASE_URL + '/functions/v1/castle-battle';
 
   const SLOTS = [
-    { slot: 'castle',        label: '🏰 캐슬',       defaultOpen: true },
-    { slot: 'turret_north',  label: '↑ 북쪽 포탑',   defaultOpen: false },
-    { slot: 'turret_east',   label: '→ 동쪽 포탑',   defaultOpen: true },
-    { slot: 'turret_south',  label: '↓ 남쪽 포탑',   defaultOpen: true },
-    { slot: 'turret_west',   label: '← 서쪽 포탑',   defaultOpen: true },
+    { slot: 'castle',        label: '캐슬',     defaultOpen: true },
+    { slot: 'turret_north',  label: '북쪽 포탑', defaultOpen: false },
+    { slot: 'turret_east',   label: '동쪽 포탑', defaultOpen: true },
+    { slot: 'turret_south',  label: '남쪽 포탑', defaultOpen: true },
+    { slot: 'turret_west',   label: '서쪽 포탑', defaultOpen: true },
   ] as const;
 
   async function callFn(body: Record<string, unknown>): Promise<any> {
@@ -204,7 +201,7 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
         <span class="cb-nr-slot-label">${slotDef.label}</span>
         <label class="cb-nr-slot-toggle">
           <input type="checkbox" class="cb-nr-open-chk" ${slotDef.defaultOpen ? 'checked' : ''}>
-          <span class="cb-nr-toggle-text">${slotDef.defaultOpen ? '집결전' : '자유전투'}</span>
+          <span>투표 진행</span>
         </label>
       </div>
       <div class="cb-nr-cands ${slotDef.defaultOpen ? '' : 'is-hidden'}">
@@ -215,12 +212,9 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
 
     const chk = card.querySelector('.cb-nr-open-chk') as HTMLInputElement;
     const cands = card.querySelector('.cb-nr-cands') as HTMLElement;
-    const toggleText = card.querySelector('.cb-nr-toggle-text') as HTMLElement;
 
     chk.addEventListener('change', () => {
-      const open = chk.checked;
-      toggleText.textContent = open ? '집결전' : '자유전투';
-      cands.classList.toggle('is-hidden', !open);
+      cands.classList.toggle('is-hidden', !chk.checked);
     });
 
     const addBtn = card.querySelector('.cb-nr-add-cand') as HTMLButtonElement;
@@ -232,14 +226,59 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
   function addCandidateRow(slotCard: HTMLElement): void {
     const list = slotCard.querySelector('.cb-nr-cand-list') as HTMLElement;
     const row = document.createElement('div');
-    row.className = 'cb-nr-cand-row';
+    row.className = 'cb-nr-cand-wrap';
     row.innerHTML = `
-      <input class="cb-nr-input cb-nr-cand-tag" type="text" placeholder="연맹 (PNX)" maxlength="20" />
-      <input class="cb-nr-input cb-nr-cand-nick" type="text" placeholder="닉네임" maxlength="50" />
-      <input class="cb-nr-input cb-nr-cand-id" type="text" placeholder="ID (선택)" maxlength="20" />
-      <button class="cb-nr-cand-del" type="button" title="삭제">✕</button>
+      <div class="cb-nr-cand-row">
+        <input class="cb-nr-input cb-nr-cand-tag" type="text" placeholder="연맹 (PNX)" maxlength="20" />
+        <input class="cb-nr-input cb-nr-cand-ksid" type="tel" placeholder="킹샷 ID" maxlength="15" pattern="[0-9]*" />
+        <button class="cb-nr-lookup-btn" type="button">조회</button>
+        <button class="cb-nr-cand-del" type="button" title="삭제">✕</button>
+      </div>
+      <div class="cb-nr-cand-result" hidden>
+        <span class="cb-nr-cand-result-nick"></span>
+      </div>
     `;
+
     row.querySelector('.cb-nr-cand-del')!.addEventListener('click', () => row.remove());
+
+    const lookupBtn = row.querySelector('.cb-nr-lookup-btn') as HTMLButtonElement;
+    const ksidInput = row.querySelector('.cb-nr-cand-ksid') as HTMLInputElement;
+    const resultEl = row.querySelector('.cb-nr-cand-result') as HTMLElement;
+    const resultNick = row.querySelector('.cb-nr-cand-result-nick') as HTMLElement;
+
+    lookupBtn.addEventListener('click', async () => {
+      const ksid = ksidInput.value.trim();
+      if (!/^\d{4,15}$/.test(ksid)) {
+        ksidInput.focus();
+        return;
+      }
+      lookupBtn.disabled = true;
+      lookupBtn.textContent = '...';
+      row.dataset.nickname = '';
+      row.dataset.profilePhoto = '';
+      resultEl.hidden = true;
+
+      try {
+        const res = await callFn({ action: 'lookup-player', kingshot_id: ksid });
+        if (res.ok) {
+          row.dataset.nickname = res.nickname ?? '';
+          row.dataset.profilePhoto = res.profile_photo ?? '';
+          resultNick.textContent = `✓ ${res.nickname}`;
+          resultEl.hidden = false;
+          lookupBtn.textContent = '재조회';
+        } else {
+          resultNick.textContent = '플레이어를 찾을 수 없습니다';
+          resultNick.style.color = 'var(--cb-red)';
+          resultEl.hidden = false;
+          lookupBtn.textContent = '조회';
+        }
+      } catch {
+        lookupBtn.textContent = '조회';
+      } finally {
+        lookupBtn.disabled = false;
+      }
+    });
+
     list.appendChild(row);
   }
 
@@ -260,13 +299,11 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
 
   function openNewRoundDlg(): void {
     const dlg = document.getElementById('cb-nr-dlg') as HTMLDialogElement;
-    const titleInput = document.getElementById('cb-nr-title-input') as HTMLInputElement;
     const dateInput = document.getElementById('cb-nr-date-input') as HTMLInputElement;
     const slotsEl = document.getElementById('cb-nr-slots') as HTMLElement;
     const errEl = document.getElementById('cb-nr-error') as HTMLElement;
 
     // 초기화
-    titleInput.value = todayTitle();
     dateInput.value = todayDatetimeLocal();
     errEl.textContent = '';
     slotsEl.innerHTML = '';
@@ -290,40 +327,50 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
     const auth = getAuthRecord();
     if (!auth) { alert('로그인이 필요합니다.'); return; }
 
-    const titleVal = (document.getElementById('cb-nr-title-input') as HTMLInputElement).value.trim();
     const dateVal = (document.getElementById('cb-nr-date-input') as HTMLInputElement).value;
     const errEl = document.getElementById('cb-nr-error') as HTMLElement;
     const submitBtn = document.getElementById('cb-nr-submit') as HTMLButtonElement;
 
-    if (!titleVal) { errEl.textContent = '회차 제목을 입력해 주세요.'; return; }
     if (!dateVal) { errEl.textContent = '이벤트 시작 일시를 선택해 주세요.'; return; }
 
     const pin = await promptPin();
     if (!pin || !/^\d{4}$/.test(pin)) { errEl.textContent = 'PIN 4자리를 입력해 주세요.'; return; }
 
     // 거점 데이터 수집
-    const slotsData: Array<{
-      slot: string;
-      is_open: boolean;
-      candidates: Array<{ alliance_tag: string; rallier_nickname: string; kingshot_id?: string }>;
-    }> = [];
+    type Candidate = { alliance_tag: string; rallier_nickname: string; kingshot_id?: string; profile_photo?: string };
+    const slotsData: Array<{ slot: string; is_open: boolean; candidates: Candidate[] }> = [];
 
+    let hasError = false;
     document.querySelectorAll<HTMLElement>('.cb-nr-slot').forEach((card) => {
       const slot = card.dataset.slot!;
       const isOpen = (card.querySelector('.cb-nr-open-chk') as HTMLInputElement).checked;
-      const candidates: Array<{ alliance_tag: string; rallier_nickname: string; kingshot_id?: string }> = [];
+      const candidates: Candidate[] = [];
 
       if (isOpen) {
-        card.querySelectorAll<HTMLElement>('.cb-nr-cand-row').forEach((row) => {
-          const tag = (row.querySelector('.cb-nr-cand-tag') as HTMLInputElement).value.trim();
-          const nick = (row.querySelector('.cb-nr-cand-nick') as HTMLInputElement).value.trim();
-          const ksId = (row.querySelector('.cb-nr-cand-id') as HTMLInputElement).value.trim();
-          if (tag && nick) candidates.push({ alliance_tag: tag, rallier_nickname: nick, kingshot_id: ksId || undefined });
+        card.querySelectorAll<HTMLElement>('.cb-nr-cand-wrap').forEach((wrap) => {
+          const tag = (wrap.querySelector('.cb-nr-cand-tag') as HTMLInputElement).value.trim();
+          const ksid = (wrap.querySelector('.cb-nr-cand-ksid') as HTMLInputElement).value.trim();
+          const nickname = wrap.dataset.nickname ?? '';
+          const profilePhoto = wrap.dataset.profilePhoto ?? '';
+
+          if (!tag && !ksid) return; // 빈 행 무시
+          if (!tag) { errEl.textContent = '연맹 태그를 입력해 주세요.'; hasError = true; return; }
+          if (!ksid) { errEl.textContent = '킹샷 ID를 입력해 주세요.'; hasError = true; return; }
+          if (!nickname) { errEl.textContent = `킹샷 ID ${ksid} 을 조회해 주세요.`; hasError = true; return; }
+
+          candidates.push({
+            alliance_tag: tag,
+            rallier_nickname: nickname,
+            kingshot_id: ksid,
+            profile_photo: profilePhoto || undefined,
+          });
         });
       }
 
       slotsData.push({ slot, is_open: isOpen, candidates });
     });
+
+    if (hasError) return;
 
     submitBtn.disabled = true;
     errEl.textContent = '';
@@ -333,7 +380,6 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
       const res = await callFn({
         action: 'admin-setup-round',
         pin,
-        title: titleVal,
         event_starts_at: eventStartsAt,
         targets: slotsData,
       });

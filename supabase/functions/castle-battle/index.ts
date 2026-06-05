@@ -32,6 +32,9 @@
  *   - voting 상태에서만 cast-vote 허용. results_in 상태에서만 admin-enter-result 허용.
  */
 
+import { crypto as stdCrypto } from "https://deno.land/std@0.168.0/crypto/mod.ts";
+import { encode as hexEncode } from "https://deno.land/std@0.168.0/encoding/hex.ts";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -40,6 +43,10 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+
+// 게임 공식 player 조회 API (tile-match-auth 와 동일 endpoint/secret)
+const KS_API_BASE = "https://kingshot-giftcode.centurygame.com/api";
+const KS_API_SECRET = "mN4!pQs6JrYwV9";
 
 const dbHeaders: Record<string, string> = {
   apikey: SERVICE_KEY,
@@ -105,6 +112,63 @@ async function sha256Hex(str: string): Promise<string> {
   return Array.from(new Uint8Array(hash))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
+}
+
+// ─── 게임 API ────────────────────────────────────────────────
+
+async function md5(str: string): Promise<string> {
+  const data = new TextEncoder().encode(str);
+  const hash = await stdCrypto.subtle.digest("MD5", data);
+  return new TextDecoder().decode(hexEncode(new Uint8Array(hash)));
+}
+
+async function makeSign(params: Record<string, string | number>): Promise<string> {
+  const sorted = Object.keys(params)
+    .filter((k) => k !== "sign")
+    .sort()
+    .map((k) => `${k}=${params[k]}`)
+    .join("&");
+  return await md5(sorted + KS_API_SECRET);
+}
+
+interface GamePlayerInfo {
+  nickname: string;
+  avatar_image: string | null;
+}
+
+async function fetchGamePlayer(kingshotId: string): Promise<GamePlayerInfo | null> {
+  try {
+    const params = { fid: kingshotId, time: Date.now() };
+    const sign = await makeSign(params);
+    const body = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) body.set(k, String(v));
+    body.set("sign", sign);
+    const res = await fetch(`${KS_API_BASE}/player`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.toString(),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    if (json.code !== 0 || !json.data) return null;
+    return { nickname: json.data.nickname, avatar_image: json.data.avatar_image ?? null };
+  } catch {
+    return null;
+  }
+}
+
+async function upsertRallier(kingshotId: string, nickname: string, profilePhoto: string | null): Promise<void> {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/cb_ralliers`, {
+    method: "POST",
+    headers: {
+      ...dbHeaders,
+      Prefer: "return=minimal,resolution=merge-duplicates",
+    },
+    body: JSON.stringify({ kingshot_id: kingshotId, nickname, profile_photo: profilePhoto, synced_at: new Date().toISOString() }),
+  });
+  if (!res.ok) {
+    console.warn(`[castle-battle] upsertRallier failed ${res.status}: ${await res.text()}`);
+  }
 }
 
 // ─── validators ──────────────────────────────────────────────
@@ -272,18 +336,22 @@ async function adminCreateRound(
  * admin-setup-round: 회차 + 거점 설정 + 후보 등록을 한 번에 처리.
  * targets 배열의 각 항목: { slot, is_open, candidates?: [{alliance_tag, alliance_name?, rallier_nickname, kingshot_id?}] }
  * 연맹은 tag 기준으로 upsert — 없으면 name(없으면 tag)으로 신규 생성.
+ * 타이틀은 자동 생성: "n회차 캐슬전투" (전체 회차 수 기반).
  */
 async function adminSetupRound(
   playerId: unknown,
   pin: unknown,
-  title: unknown,
   eventStartsAt: unknown,
   memo: unknown,
   targets: unknown,
 ) {
   const me = await requireAdmin(playerId, pin);
-  if (typeof title !== "string" || title.length === 0 || title.length > 200) throw new Error("missing_field");
   if (typeof eventStartsAt !== "string" || !eventStartsAt) throw new Error("missing_field");
+
+  // 회차 번호 자동 생성
+  const allRounds = await dbSelect("cb_rounds?select=id");
+  const roundNum = allRounds.length + 1;
+  const title = `${roundNum}회차 캐슬전투`;
 
   const round = await dbInsert(
     "cb_rounds",
@@ -325,12 +393,19 @@ async function adminSetupRound(
         alliance = { id: newA[0].id };
       }
 
+      const ksId = typeof cand.kingshot_id === "string" && cand.kingshot_id ? cand.kingshot_id : null;
+
+      // cb_ralliers upsert — 집결자 프로필 캐시
+      if (ksId && cand.rallier_nickname) {
+        upsertRallier(ksId, cand.rallier_nickname, cand.profile_photo ?? null).catch(() => {});
+      }
+
       try {
         await dbInsert("cb_candidates", {
           target_id: targetId,
           alliance_id: alliance.id,
           rallier_nickname: cand.rallier_nickname,
-          kingshot_id: typeof cand.kingshot_id === "string" && cand.kingshot_id ? cand.kingshot_id : null,
+          kingshot_id: ksId,
           display_order: order++,
         });
       } catch {
@@ -340,6 +415,17 @@ async function adminSetupRound(
   }
 
   return { ok: true, round_id: roundId };
+}
+
+/** lookup-player: 킹샷 ID 로 게임 API 조회 → cb_ralliers upsert → 프로필 반환. 인증 불필요 (공개 API). */
+async function lookupPlayer(kingshotId: unknown) {
+  if (typeof kingshotId !== "string" || !/^\d{4,15}$/.test(kingshotId)) {
+    return { ok: false, error: "invalid_player_id" };
+  }
+  const info = await fetchGamePlayer(kingshotId);
+  if (!info) return { ok: false, error: "player_not_found" };
+  upsertRallier(kingshotId, info.nickname, info.avatar_image).catch(() => {});
+  return { ok: true, nickname: info.nickname, profile_photo: info.avatar_image };
 }
 
 async function adminSetRoundStatus(
@@ -651,10 +737,15 @@ Deno.serve(async (req: Request) => {
         result = await myVotes(body.player_id, body.pin, body.round_id);
         break;
 
+      // 공개 조회 (인증 불필요)
+      case "lookup-player":
+        result = await lookupPlayer(body.kingshot_id);
+        break;
+
       // 운영자
       case "admin-setup-round":
         result = await adminSetupRound(
-          body.player_id, body.pin, body.title, body.event_starts_at, body.memo, body.targets,
+          body.player_id, body.pin, body.event_starts_at, body.memo, body.targets,
         );
         break;
       case "admin-create-round":
