@@ -795,8 +795,11 @@
     display: flex; align-items: center; justify-content: center;
     font-size: 30px; font-weight: 800;
     color: white;
-    border: 2px solid rgba(255, 255, 255, 0.88);
-    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.55);
+    /* 3겹 경계: 풀톤 흰 보더(밝은 영역 분리) + 다크 1px 링(어두운 영역 분리) + 강화 drop-shadow */
+    border: 3px solid #ffffff;
+    box-shadow:
+      0 0 0 1.5px rgba(15, 23, 42, 0.55),
+      0 8px 18px rgba(0, 0, 0, 0.65);
     letter-spacing: -0.02em;
     overflow: hidden;
   }
@@ -843,7 +846,10 @@
     width: 58px; height: 58px;
     border-radius: 10px;
     font-size: 26px;
-    border-width: 1.5px;
+    border-width: 2.5px;
+    box-shadow:
+      0 0 0 1.25px rgba(15, 23, 42, 0.55),
+      0 6px 14px rgba(0, 0, 0, 0.60);
   }
   .cb-target:not([data-slot="castle"]) .cb-leader-portrait-name {
     font-size: 13px;
