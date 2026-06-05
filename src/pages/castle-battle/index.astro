@@ -80,7 +80,6 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
 
       <div class="cb-nr-header">
         <h2 class="cb-nr-title">신규 회차 등록</h2>
-        <button class="cb-nr-close" id="cb-nr-close" type="button" aria-label="닫기">✕</button>
       </div>
 
       <div class="cb-nr-body">
@@ -362,14 +361,8 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
   // ─── 이벤트 와이어업 ─────────────────────────────────────────
 
   document.getElementById('cb-admin-new-round-btn')?.addEventListener('click', openNewRoundDlg);
-  document.getElementById('cb-nr-close')?.addEventListener('click', closeNewRoundDlg);
   document.getElementById('cb-nr-cancel')?.addEventListener('click', closeNewRoundDlg);
   document.getElementById('cb-nr-submit')?.addEventListener('click', submitNewRound);
-
-  // 다이얼로그 backdrop 클릭 닫기
-  document.getElementById('cb-nr-dlg')?.addEventListener('click', (e) => {
-    if (e.target === e.currentTarget) closeNewRoundDlg();
-  });
 </script>
 
 <style is:global>
