@@ -74,13 +74,19 @@ function isValidPin(pin: unknown): pin is string {
 
 async function pinStatus(playerId: string) {
   const member = await dbSelectOne(
-    `members?kingshot_id=eq.${encodeURIComponent(playerId)}&select=kingshot_id,nickname,is_admin`
+    `members?kingshot_id=eq.${encodeURIComponent(playerId)}&select=kingshot_id,nickname,profile_photo,is_admin`
   );
   if (!member) return { ok: false, error: "member_not_found" };
   const cred = await dbSelectOne(
     `member_credentials?player_id=eq.${encodeURIComponent(playerId)}&select=player_id`
   );
-  return { ok: true, nickname: member.nickname, registered: !!cred, is_admin: !!member.is_admin };
+  return {
+    ok: true,
+    nickname: member.nickname,
+    profile_photo: member.profile_photo ?? null,
+    registered: !!cred,
+    is_admin: !!member.is_admin,
+  };
 }
 
 async function setPin(playerId: string, pin: unknown) {

@@ -24,11 +24,13 @@ const FN_URL = SUPABASE_URL + '/functions/v1/tile-match-auth';
 interface PlayerInfo {
   kingshot_id: string;
   nickname: string;
+  profile_photo: string | null;
 }
 interface PinStatusResp {
   ok: boolean;
   error?: string;
   nickname?: string;
+  profile_photo?: string | null;
   registered?: boolean;
   is_admin?: boolean;
 }
@@ -138,10 +140,15 @@ function init(): void {
   function fillPlayerCard(player: PlayerInfo): void {
     playerName.textContent = player.nickname;
     playerId.textContent = `#${player.kingshot_id}`;
-    // tile-match-auth 는 게임 API 를 거치지 않아 avatar 없음 — 이니셜 표시.
-    photo.hidden = true;
-    photoEmpty.style.display = '';
-    photoEmpty.textContent = (player.nickname || '?').charAt(0);
+    if (player.profile_photo) {
+      photo.src = player.profile_photo;
+      photo.hidden = false;
+      photoEmpty.style.display = 'none';
+    } else {
+      photo.hidden = true;
+      photoEmpty.style.display = '';
+      photoEmpty.textContent = (player.nickname || '?').charAt(0);
+    }
   }
 
   async function onSearchId(): Promise<void> {
@@ -158,7 +165,7 @@ function init(): void {
         setStatus(idStatus, mapError(json.error), 'err');
         return;
       }
-      currentPlayer = { kingshot_id: id, nickname: json.nickname };
+      currentPlayer = { kingshot_id: id, nickname: json.nickname, profile_photo: json.profile_photo ?? null };
       setMode(json.registered ? 'login' : 'register');
       fillPlayerCard(currentPlayer);
       showStep('pin');
@@ -188,6 +195,7 @@ function init(): void {
       const record = {
         kingshot_id: currentPlayer.kingshot_id,
         nickname: currentPlayer.nickname,
+        avatar_url: currentPlayer.profile_photo,
         is_admin: json.is_admin ?? false,
       };
       try {
