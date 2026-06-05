@@ -39,8 +39,12 @@
         <div class="app-auth-status" id="app-auth-id-status" role="status" aria-live="polite"></div>
       </div>
 
-      {/* Step 2: PIN 확인 (인증된 사용자) */}
+      {/* Step 2: PIN 입력 — login (기존 등록자) 또는 register (신규) */}
       <div class="app-auth-step" id="app-auth-step-pin" hidden>
+        <div class="app-auth-mode-banner" id="app-auth-mode-banner" hidden>
+          <span class="app-auth-mode-emoji" aria-hidden="true">✨</span>
+          <span class="app-auth-mode-text">신규 PIN 등록 — 사용하실 PIN 4자리를 직접 정해주세요.</span>
+        </div>
         <div class="app-auth-player">
           <div class="app-auth-photo-wrap">
             <div class="app-auth-photo-empty" id="app-auth-photo-empty">?</div>
@@ -51,7 +55,7 @@
             <div class="app-auth-player-id" id="app-auth-player-id">-</div>
           </div>
         </div>
-        <p class="app-auth-help">등록한 PIN 4자리를 입력해 주세요.</p>
+        <p class="app-auth-help" id="app-auth-pin-help">등록한 PIN 4자리를 입력해 주세요.</p>
         <div class="app-auth-pin-wrap">
           <input
             class="app-auth-pin-input"
@@ -76,20 +80,6 @@
         <div class="app-auth-status" id="app-auth-pin-status" role="status" aria-live="polite"></div>
         <div class="app-auth-actions">
           <button type="button" class="app-auth-btn-secondary" id="app-auth-back">뒤로</button>
-        </div>
-      </div>
-
-      {/* Step 3: 신규 사용자 안내 (lookup 응답이 registered:false) */}
-      <div class="app-auth-step" id="app-auth-step-new" hidden>
-        <div class="app-auth-new-icon">👋</div>
-        <h4 class="app-auth-new-title">처음 오셨네요!</h4>
-        <p class="app-auth-new-body">
-          신규 등록은 <strong>KvK 설문</strong> 페이지의 [등록 / 수정] 에서 진행해 주세요.
-          첫 등록 후 이 곳에서 PIN 만으로 빠른 로그인이 가능합니다.
-        </p>
-        <div class="app-auth-actions">
-          <button type="button" class="app-auth-btn-secondary" id="app-auth-new-back">뒤로</button>
-          <a class="app-auth-btn-primary" href="/survey/" id="app-auth-new-go">KvK 설문으로 이동 →</a>
         </div>
       </div>
     </div>
@@ -328,25 +318,24 @@
     margin-top: 4px;
   }
 
-  /* Step 3: 신규 안내 */
-  .app-auth-new-icon {
-    text-align: center;
-    font-size: 36px;
-    line-height: 1;
-    margin-top: 6px;
+  /* 신규 등록 모드 배너 — registered:false 일 때 step-pin 상단 노출 */
+  .app-auth-mode-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: rgba(124, 58, 237, 0.08);
+    border: 1px solid rgba(124, 58, 237, 0.28);
+    border-radius: 8px;
+    font-size: 12px;
+    color: var(--brand-accent);
+    font-weight: 600;
+    line-height: 1.4;
   }
-  .app-auth-new-title {
-    text-align: center;
-    font-size: 16px;
-    font-weight: 800;
-    color: var(--brand-text);
-    margin: 0;
+  .app-auth-mode-banner[hidden] { display: none; }
+  .app-auth-mode-emoji {
+    font-size: 14px;
+    flex-shrink: 0;
   }
-  .app-auth-new-body {
-    font-size: 12.5px;
-    color: var(--brand-text-dim);
-    line-height: 1.6;
-    text-align: center;
-  }
-  .app-auth-new-body strong { color: var(--brand-accent); }
+  .app-auth-mode-text { flex: 1; }
 </style>

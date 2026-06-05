@@ -2,11 +2,18 @@
  * 전역 인증 다이얼로그 클라이언트 로직.
  *
  * 트리거: document 의 'app-open-auth' 커스텀 이벤트.
- * EF: kvk-survey (action: lookup / login) — survey.ts 와 동일 백엔드 + AUTH_KEY 호환.
+ * EF: kvk-survey (action: lookup / login / register) — survey.ts 와 동일 백엔드 + AUTH_KEY 호환.
  *
  * 상태 흐름:
- *   id-input → (lookup) → 등록됨이면 pin-input → (login) → AUTH_KEY 저장 + 닫기
- *                       → 미등록이면 new-user 안내
+ *   id-input → (lookup) → pin-input
+ *     - 등록됨(registered:true)  → login   → AUTH_KEY 저장 + 닫기
+ *     - 미등록(registered:false) → register (training/construction/general 0/0/0)
+ *                                → AUTH_KEY 저장 + 닫기
+ *
+ * 신규 등록 시 0/0/0 로 초기화: 인증 인프라는 KvK 설문 데이터와 독립 — 사용자가 추후
+ * KvK 페이지에서 실제 값으로 update 가능 (action: update).
+ *
+ * 단, 서버측 게이트로 TC 레벨 26 미만은 register 단계에서 거부됨 (kvk-survey EF 정책).
  */
 
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '@/lib/shared/supabase';
@@ -44,6 +51,8 @@ interface LoginResp {
   expires_at?: string;
   record?: MyRecord;
 }
+// register 응답도 동일 형식 (token + expires_at + record)
+type RegisterResp = LoginResp;
 
 async function callFn<T>(body: Record<string, unknown>): Promise<T> {
   const res = await fetch(FN_URL, {
@@ -60,12 +69,14 @@ async function callFn<T>(body: Record<string, unknown>): Promise<T> {
 }
 
 function mapError(code: string | undefined): string {
-  // 사용자 친화 메시지 — KvK 의 핵심 코드만 커버.
+  // 사용자 친화 메시지 — kvk-survey EF 의 핵심 에러 코드 커버.
   const map: Record<string, string> = {
     not_found: '존재하지 않는 킹샷 ID 예요. ID를 다시 확인해주세요.',
     invalid_id: '올바른 킹샷 ID 가 아닙니다.',
     invalid_pin: 'PIN 형식이 올바르지 않습니다.',
     wrong_pin: 'PIN 이 일치하지 않습니다.',
+    already_registered: '이미 등록된 ID 입니다. 기존 PIN 으로 로그인해 주세요.',
+    insufficient_city_level: 'TC 레벨 26 이상부터 신규 등록이 가능합니다.',
     rate_limited: '요청이 너무 잦습니다. 잠시 후 다시 시도해주세요.',
   };
   return map[code ?? ''] ?? '일시적인 문제가 발생했어요. 잠시 후 다시 시도해주세요.';
@@ -85,21 +96,30 @@ function init(): void {
   const pinStatus = document.getElementById('app-auth-pin-status') as HTMLElement;
   const backBtn = document.getElementById('app-auth-back') as HTMLButtonElement;
   const closeBtn = document.getElementById('app-auth-close') as HTMLButtonElement;
-  const newBackBtn = document.getElementById('app-auth-new-back') as HTMLButtonElement;
   const stepId = document.getElementById('app-auth-step-id') as HTMLElement;
   const stepPin = document.getElementById('app-auth-step-pin') as HTMLElement;
-  const stepNew = document.getElementById('app-auth-step-new') as HTMLElement;
+  const modeBanner = document.getElementById('app-auth-mode-banner') as HTMLElement;
+  const pinHelp = document.getElementById('app-auth-pin-help') as HTMLElement;
   const playerName = document.getElementById('app-auth-player-name') as HTMLElement;
   const playerId = document.getElementById('app-auth-player-id') as HTMLElement;
   const photo = document.getElementById('app-auth-photo') as HTMLImageElement;
   const photoEmpty = document.getElementById('app-auth-photo-empty') as HTMLElement;
 
   let currentPlayer: PlayerInfo | null = null;
+  let currentMode: 'login' | 'register' = 'login';
 
-  function showStep(step: 'id' | 'pin' | 'new'): void {
+  function showStep(step: 'id' | 'pin'): void {
     stepId.hidden = step !== 'id';
     stepPin.hidden = step !== 'pin';
-    stepNew.hidden = step !== 'new';
+  }
+
+  function setMode(mode: 'login' | 'register'): void {
+    currentMode = mode;
+    modeBanner.hidden = mode !== 'register';
+    pinHelp.textContent =
+      mode === 'register'
+        ? '사용하실 PIN 4자리를 입력해 주세요. (이 PIN 으로 다음부터 로그인합니다)'
+        : '등록한 PIN 4자리를 입력해 주세요.';
   }
 
   function setStatus(el: HTMLElement, msg: string, tone: '' | 'err' | 'ok' = ''): void {
@@ -123,6 +143,7 @@ function init(): void {
     setStatus(idStatus, '');
     setStatus(pinStatus, '');
     currentPlayer = null;
+    setMode('login');
     syncPinBoxes();
     showStep('id');
   }
@@ -163,12 +184,9 @@ function init(): void {
         setStatus(idStatus, mapError(json.error), 'err');
         return;
       }
-      if (!json.registered) {
-        // 신규 사용자 — KvK 설문에서 첫 등록 안내
-        showStep('new');
-        return;
-      }
       currentPlayer = json.player;
+      // 등록 여부에 따라 모드 결정 — 동일 step-pin 안에서 helper/banner 만 swap.
+      setMode(json.registered ? 'login' : 'register');
       fillPlayerCard(json.player);
       showStep('pin');
       setTimeout(() => pinInput.focus(), 50);
@@ -188,11 +206,21 @@ function init(): void {
     }
     setStatus(pinStatus, '');
     try {
-      const json = await callFn<LoginResp>({
-        action: 'login',
-        kingshot_id: currentPlayer.kingshot_id,
-        pin,
-      });
+      // 신규 등록: register (training/construction/general = 0/0/0, 인증 인프라는 KvK 데이터와 독립).
+      // 기존 사용자: login (PIN 검증 + 토큰 발급).
+      // 두 응답 형식 동일 → AUTH_KEY 호환.
+      const body =
+        currentMode === 'register'
+          ? {
+              action: 'register',
+              kingshot_id: currentPlayer.kingshot_id,
+              pin,
+              training: 0,
+              construction: 0,
+              general: 0,
+            }
+          : { action: 'login', kingshot_id: currentPlayer.kingshot_id, pin };
+      const json = await callFn<LoginResp | RegisterResp>(body);
       if (!json.ok || !json.token || !json.expires_at || !json.record) {
         setStatus(pinStatus, mapError(json.error), 'err');
         return;
@@ -244,10 +272,7 @@ function init(): void {
     pinInput.value = '';
     syncPinBoxes();
     setStatus(pinStatus, '');
-    showStep('id');
-    setTimeout(() => idInput.focus(), 50);
-  });
-  newBackBtn?.addEventListener('click', () => {
+    setMode('login');
     showStep('id');
     setTimeout(() => idInput.focus(), 50);
   });
