@@ -5,13 +5,19 @@
  * member_credentials 테이블은 anon select 차단 → 이 함수만 (service_role) 접근.
  *
  * 액션:
- *   { action: "pin-status",  player_id }       → { ok, nickname, registered }
+ *   { action: "pin-status",  player_id }       → { ok, nickname, profile_photo, registered, is_admin }
  *   { action: "set-pin",     player_id, pin }  → { ok } | { ok:false, error }
  *   { action: "verify-pin",  player_id, pin }  → { ok } | { ok:false, error }
  *
  * pin: 정확히 4자리 숫자 문자열 ("0000"~"9999").
  * hash: SHA-256(pin + per-user salt). salt 는 등록 시 랜덤 16바이트 hex.
+ *
+ * pin-status 호출 시 게임 공식 API (centurygame) 로 닉네임/아바타 최신화 → members 테이블 동기.
+ * API 실패 시 DB 캐시 값으로 폴백 (로그인 자체는 차단하지 않음).
  */
+import { crypto as stdCrypto } from "https://deno.land/std@0.168.0/crypto/mod.ts";
+import { encode as hexEncode } from "https://deno.land/std@0.168.0/encoding/hex.ts";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -20,6 +26,10 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+
+// 게임 공식 player 조회 API — kvk-survey EF 와 동일 endpoint/secret.
+const KS_API_BASE = "https://kingshot-giftcode.centurygame.com/api";
+const KS_API_SECRET = "mN4!pQs6JrYwV9";
 
 const dbHeaders: Record<string, string> = {
   apikey: SERVICE_KEY,
@@ -72,18 +82,79 @@ function isValidPin(pin: unknown): pin is string {
   return typeof pin === "string" && /^\d{4}$/.test(pin);
 }
 
+// ─── 게임 API 조회 ────────────────────────────────────────────────────────────
+
+async function md5(str: string): Promise<string> {
+  const data = new TextEncoder().encode(str);
+  const hash = await stdCrypto.subtle.digest("MD5", data);
+  return new TextDecoder().decode(hexEncode(new Uint8Array(hash)));
+}
+
+async function makeSign(params: Record<string, string | number>): Promise<string> {
+  const sorted = Object.keys(params)
+    .filter((k) => k !== "sign")
+    .sort()
+    .map((k) => `${k}=${params[k]}`)
+    .join("&");
+  return await md5(sorted + KS_API_SECRET);
+}
+
+interface GamePlayerInfo {
+  nickname: string;
+  avatar_image: string | null;
+}
+
+/** 게임 공식 API 에서 닉네임/아바타 조회. 실패 시 null 반환 (로그인 차단 X). */
+async function fetchGamePlayer(kingshotId: string): Promise<GamePlayerInfo | null> {
+  try {
+    const params = { fid: kingshotId, time: Date.now() };
+    const sign = await makeSign(params);
+    const body = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) body.set(k, String(v));
+    body.set("sign", sign);
+
+    const res = await fetch(`${KS_API_BASE}/player`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.toString(),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    if (json.code !== 0 || !json.data) return null;
+    return {
+      nickname: json.data.nickname,
+      avatar_image: json.data.avatar_image ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ─── 액션 핸들러 ──────────────────────────────────────────────────────────────
+
 async function pinStatus(playerId: string) {
   const member = await dbSelectOne(
     `members?kingshot_id=eq.${encodeURIComponent(playerId)}&select=kingshot_id,nickname,profile_photo,is_admin`
   );
   if (!member) return { ok: false, error: "member_not_found" };
+
+  // 게임 API 에서 최신 닉네임/아바타 조회 → DB 업데이트 (실패 시 캐시 폴백).
+  const fresh = await fetchGamePlayer(playerId);
+  if (fresh) {
+    dbPatch(`members?kingshot_id=eq.${encodeURIComponent(playerId)}`, {
+      nickname: fresh.nickname,
+      profile_photo: fresh.avatar_image,
+      updated_at: new Date().toISOString(),
+    }).catch(() => { /* 업데이트 실패는 무시 — 이미 응답값은 fresh 사용 */ });
+  }
+
   const cred = await dbSelectOne(
     `member_credentials?player_id=eq.${encodeURIComponent(playerId)}&select=player_id`
   );
   return {
     ok: true,
-    nickname: member.nickname,
-    profile_photo: member.profile_photo ?? null,
+    nickname: fresh?.nickname ?? member.nickname,
+    profile_photo: fresh?.avatar_image ?? member.profile_photo ?? null,
     registered: !!cred,
     is_admin: !!member.is_admin,
   };
@@ -113,7 +184,6 @@ async function verifyPin(playerId: string, pin: unknown) {
   if (!cred) return { ok: false, error: "not_registered" };
   const computed = await sha256Hex(pin + cred.pin_salt);
   if (computed !== cred.pin_hash) return { ok: false, error: "invalid_pin" };
-  // 인증 성공 → admin 플래그 같이 반환 (클라이언트 세션에 박제)
   const member = await dbSelectOne(
     `members?kingshot_id=eq.${encodeURIComponent(playerId)}&select=is_admin`
   );
