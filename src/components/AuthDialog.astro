@@ -271,10 +271,12 @@
     margin: 4px 0 2px;
   }
 
-  /* PIN 4박스 */
+  /* PIN 4박스 — KvK sk-pin-box 비율(48×56, radius 10, border 2px) 그대로 차용 */
   .app-auth-pin-wrap {
     position: relative;
-    height: 48px;
+    height: 56px;
+    margin: 4px auto 2px;
+    width: fit-content;
   }
   .app-auth-pin-input {
     position: absolute;
@@ -285,27 +287,31 @@
     z-index: 1;
     font: inherit;
     cursor: text;
+    width: 100%;
   }
   .app-auth-pin-boxes {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 8px;
+    display: flex;
+    gap: 10px;
     pointer-events: none;
   }
   .app-auth-pin-box {
-    height: 48px;
-    border-radius: 8px;
-    border: 1px solid var(--brand-border-strong);
-    background: var(--brand-surface);
+    width: 48px;
+    height: 56px;
+    border-radius: 10px;
+    border: 2px solid var(--brand-border-strong);
+    background: var(--brand-surface-2);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 22px;
+    font-size: 24px;
     font-weight: 700;
     color: var(--brand-text);
     transition: border-color 0.15s, box-shadow 0.15s;
   }
-  .app-auth-pin-box.is-filled { color: var(--brand-accent); }
+  .app-auth-pin-box.is-filled {
+    color: var(--brand-accent);
+    border-color: rgba(124, 58, 237, 0.45);
+  }
   .app-auth-pin-box.is-active {
     border-color: var(--brand-accent);
     box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);

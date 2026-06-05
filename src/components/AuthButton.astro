@@ -1,35 +1,83 @@
 ---
-// 헤더의 "계정 인증" 버튼 — 모든 페이지 공통, 실제 인증 상태와 연동.
+// 헤더의 로그인/계정 위젯 — PNX LoginedUserInfo 패턴 차용.
+// 비로그인: 텍스트 "로그인" 버튼 (플랫)
+// 로그인:   [아바타] [닉네임] ▾  → 클릭 시 드롭다운 (로그아웃)
 //
 // 상태 source: localStorage('pnx-sk-auth-v1')
-//   = { token, expires_at, record: { kingshot_id, nickname, is_admin, ... } }
-//   survey.ts 의 saveAuth/clearAuth 가 관리.
-//
-// 상태 sync:
-//   1) 다른 탭 변경 → `storage` 이벤트
-//   2) 같은 탭 변경 → survey.ts 가 dispatch 하는 'app-auth-changed' 커스텀 이벤트
+// 상태 sync 3채널:
+//   1) 같은 탭: 'app-auth-changed' (survey.ts / auth-dialog.ts 가 dispatch)
+//   2) 다른 탭: 'storage'
+//   3) lang 변경: <html lang> MutationObserver
 //
 // 클릭 동작:
-//   - 미인증: 'app-open-auth' dispatch → 각 페이지가 본인 인증 다이얼로그 활성화
-//   - 인증됨: 기존 #sk-logout-btn 을 programmatic click → KvK 의 logout 흐름 재사용
-//             (confirm → token 무효화 → clearAuth → UI sync)
+//   - 비로그인: 'app-open-auth' dispatch → BaseLayout 의 AuthDialog
+//   - 로그인: 드롭다운 토글 → 로그아웃 항목 → 기존 sk-logout-btn programmatic click
 ---
 
-<button class="auth-btn" id="app-auth-btn" type="button" data-i18n-attr-title="header.auth" title="계정 인증">
-  <span class="auth-btn-dot" aria-hidden="true"></span>
-  <span class="auth-btn-label" data-i18n="header.auth">계정 인증</span>
-</button>
+<div class="hu" id="hu-root" data-state="loggedout">
+  {/* 비로그인 */}
+  <button class="hu-login" id="hu-login" type="button" data-i18n="common.login">로그인</button>
+
+  {/* 로그인 */}
+  <div class="hu-card" id="hu-card" hidden>
+    <button
+      class="hu-trigger"
+      id="hu-trigger"
+      type="button"
+      aria-haspopup="menu"
+      aria-expanded="false"
+    >
+      <span class="hu-avatar" aria-hidden="true">
+        <img class="hu-avatar-img" id="hu-avatar-img" alt="" hidden />
+        <span class="hu-avatar-initial" id="hu-avatar-initial">-</span>
+      </span>
+      <span class="hu-name" id="hu-name">-</span>
+      <svg
+        class="hu-caret"
+        width="10"
+        height="10"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2.5"
+        stroke-linecap="round"
+        aria-hidden="true"
+      >
+        <polyline points="6 9 12 15 18 9"></polyline>
+      </svg>
+    </button>
+    <div class="hu-dropdown" id="hu-dropdown" role="menu" hidden>
+      <div class="hu-dropdown-name" id="hu-dropdown-name">-</div>
+      <button
+        class="hu-dropdown-logout"
+        id="hu-logout-btn"
+        type="button"
+        role="menuitem"
+        data-i18n="common.logout"
+      >로그아웃</button>
+    </div>
+  </div>
+</div>
 
 <script>
   (function () {
     const AUTH_KEY = 'pnx-sk-auth-v1';
-    const btn = document.getElementById('app-auth-btn');
-    const label = btn?.querySelector<HTMLElement>('.auth-btn-label');
-    if (!btn || !label) return;
+    const root = document.getElementById('hu-root');
+    const loginBtn = document.getElementById('hu-login');
+    const card = document.getElementById('hu-card');
+    const trigger = document.getElementById('hu-trigger');
+    const avatarImg = document.getElementById('hu-avatar-img') as HTMLImageElement | null;
+    const avatarInitial = document.getElementById('hu-avatar-initial');
+    const nameEl = document.getElementById('hu-name');
+    const dropdown = document.getElementById('hu-dropdown');
+    const dropdownName = document.getElementById('hu-dropdown-name');
+    const logoutItem = document.getElementById('hu-logout-btn');
+    if (!root || !loginBtn || !card || !trigger || !nameEl || !dropdown || !logoutItem) return;
 
     interface AuthRecord {
       kingshot_id: string;
       nickname: string;
+      avatar_url?: string | null;
       is_admin?: boolean;
     }
     interface AuthState {
@@ -37,7 +85,6 @@
       expires_at: string;
       record: AuthRecord;
     }
-
     function readAuth(): AuthState | null {
       try {
         const raw = localStorage.getItem(AUTH_KEY);
@@ -45,64 +92,88 @@
         const obj = JSON.parse(raw);
         if (typeof obj?.token !== 'string' || !obj?.record) return null;
         return obj as AuthState;
-      } catch {
-        return null;
-      }
+      } catch { return null; }
     }
 
-    // i18n 헬퍼 — 페이지 lang attribute 보고 키 swap. 키가 없으면 fallback 한국어.
-    function tt(): { auth: string; authed: string } {
-      const lang = document.documentElement.lang || 'ko';
-      return lang.startsWith('en')
-        ? { auth: 'Sign in', authed: 'Signed in' }
-        : { auth: '계정 인증', authed: '인증됨' };
+    function setExpanded(open: boolean) {
+      trigger!.setAttribute('aria-expanded', open ? 'true' : 'false');
+      root!.dataset.open = open ? 'true' : 'false';
+      if (open) dropdown!.removeAttribute('hidden');
+      else dropdown!.setAttribute('hidden', '');
     }
+    function closeDropdown() { setExpanded(false); }
 
     function render() {
       const auth = readAuth();
-      const { auth: authText } = tt();
       if (auth) {
-        btn!.classList.add('is-authed');
-        label!.textContent = auth.record.nickname || '인증됨';
-        label!.removeAttribute('data-i18n'); // 동적 닉네임 — i18n swap 비대상
-        btn!.title = `로그아웃 (${auth.record.nickname})`;
-      } else {
-        btn!.classList.remove('is-authed');
-        label!.textContent = authText;
-        label!.setAttribute('data-i18n', 'header.auth');
-        btn!.title = '계정 인증';
-      }
-    }
-
-    btn.addEventListener('click', () => {
-      const auth = readAuth();
-      if (auth) {
-        // 인증됨 → KvK 의 기존 sk-logout-btn 을 programmatic click (confirm + 토큰 무효화 흐름 재사용).
-        const logoutBtn = document.getElementById('sk-logout-btn') as HTMLButtonElement | null;
-        if (logoutBtn) {
-          logoutBtn.click();
-        } else {
-          // KvK 페이지가 아니면 (Castle 등) 로그아웃 핸들러 직접 호출 fallback
-          if (confirm('로그아웃 하시겠습니까?')) {
-            try { localStorage.removeItem(AUTH_KEY); } catch { /* */ }
-            document.dispatchEvent(new CustomEvent('app-auth-changed'));
+        root!.dataset.state = 'loggedin';
+        loginBtn!.setAttribute('hidden', '');
+        card!.removeAttribute('hidden');
+        const nick = auth.record.nickname || '인증됨';
+        nameEl!.textContent = nick;
+        if (dropdownName) dropdownName.textContent = nick;
+        // avatar — profile_photo / avatar_url 둘 다 호환
+        const url = auth.record.avatar_url || null;
+        if (avatarImg) {
+          if (url) {
+            avatarImg.src = url;
+            avatarImg.hidden = false;
+            if (avatarInitial) avatarInitial.style.display = 'none';
+          } else {
+            avatarImg.hidden = true;
+            if (avatarInitial) {
+              avatarInitial.style.display = '';
+              avatarInitial.textContent = (nick || '?').charAt(0);
+            }
           }
         }
       } else {
-        // 미인증 → 각 페이지가 listen 해 본인 인증 다이얼로그 활성화
-        document.dispatchEvent(new CustomEvent('app-open-auth'));
+        root!.dataset.state = 'loggedout';
+        loginBtn!.removeAttribute('hidden');
+        card!.setAttribute('hidden', '');
+        closeDropdown();
+      }
+    }
+
+    // 비로그인 클릭 → 인증 다이얼로그
+    loginBtn.addEventListener('click', () => {
+      document.dispatchEvent(new CustomEvent('app-open-auth'));
+    });
+    // 로그인 trigger → 드롭다운 토글
+    trigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const open = root!.dataset.open !== 'true';
+      setExpanded(open);
+    });
+    // 드롭다운 로그아웃 → KvK 의 sk-logout-btn 트리거 (있으면) 또는 fallback
+    logoutItem.addEventListener('click', () => {
+      closeDropdown();
+      const sk = document.getElementById('sk-logout-btn') as HTMLButtonElement | null;
+      if (sk) {
+        sk.click();
+        return;
+      }
+      // KvK 페이지가 아닐 때 fallback — confirm + localStorage 제거
+      if (confirm('로그아웃 하시겠습니까?')) {
+        try { localStorage.removeItem(AUTH_KEY); } catch { /* */ }
+        document.dispatchEvent(new CustomEvent('app-auth-changed'));
       }
     });
-
-    // 상태 변화 sync — 같은 탭 + 다른 탭
-    document.addEventListener('app-auth-changed', render);
-    window.addEventListener('storage', (e) => {
-      if (e.key === AUTH_KEY) render();
+    // 바깥 클릭 → 드롭다운 닫기
+    document.addEventListener('click', (e) => {
+      if (root!.dataset.open !== 'true') return;
+      if (!root!.contains(e.target as Node)) closeDropdown();
     });
-    // i18n 언어 swap 도 다시 그려야 함 (현재는 lang attr 변경 감지)
+    // ESC
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && root!.dataset.open === 'true') closeDropdown();
+    });
+
+    // 상태 sync 3채널
+    document.addEventListener('app-auth-changed', render);
+    window.addEventListener('storage', (e) => { if (e.key === AUTH_KEY) render(); });
     new MutationObserver(render).observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['lang'],
+      attributes: true, attributeFilter: ['lang'],
     });
 
     render();
@@ -110,57 +181,129 @@
 </script>
 
 <style>
-  .auth-btn {
+  .hu {
+    position: relative;
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 5px 12px;
+    flex-shrink: 0;
+  }
+
+  /* 비로그인 — 플랫 텍스트 버튼 (PNX hu-login 결) */
+  .hu-login {
+    background: none;
+    border: none;
+    color: var(--brand-text);
+    padding: 6px 10px;
     border-radius: 6px;
-    background: rgba(124, 58, 237, 0.10);
-    border: 1px solid rgba(124, 58, 237, 0.35);
-    color: var(--brand-accent);
+    cursor: pointer;
     font: inherit;
     font-size: 12.5px;
     font-weight: 700;
+    transition: background 0.15s, color 0.15s;
+  }
+  .hu-login:hover {
+    background: rgba(124, 58, 237, 0.10);
+    color: var(--brand-accent);
+  }
+
+  /* 로그인 — 카드 (아바타 + 닉네임 + caret) */
+  .hu-card { display: inline-flex; }
+  .hu-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: none;
+    border: none;
+    padding: 4px 8px 4px 4px;
+    border-radius: 999px;
     cursor: pointer;
-    transition: background 0.15s, border-color 0.15s;
-    flex-shrink: 0;
+    font: inherit;
+    color: var(--brand-text);
+    transition: background 0.15s;
   }
-  .auth-btn:hover {
-    background: rgba(124, 58, 237, 0.16);
-    border-color: rgba(124, 58, 237, 0.50);
-  }
-  /* 인증된 상태: cyan 톤 (KvK 의 voted 색과 일관) — "활성 세션" 식별 */
-  .auth-btn.is-authed {
-    background: rgba(14, 116, 144, 0.10);
-    border-color: rgba(14, 116, 144, 0.40);
-    color: var(--brand-info);
-  }
-  .auth-btn.is-authed:hover {
-    background: rgba(14, 116, 144, 0.16);
-    border-color: rgba(14, 116, 144, 0.55);
-  }
-  /* dot — 인증됨 상태에서만 노출 (CSS 로 미인증 hide) */
-  .auth-btn-dot {
-    display: none;
-    width: 6px;
-    height: 6px;
+  .hu-trigger:hover { background: rgba(15, 23, 42, 0.05); }
+  .hu[data-open='true'] .hu-trigger { background: rgba(124, 58, 237, 0.10); }
+
+  .hu-avatar {
+    width: 26px;
+    height: 26px;
     border-radius: 50%;
-    background: var(--brand-info);
-    box-shadow: 0 0 6px rgba(14, 116, 144, 0.65);
+    overflow: hidden;
+    flex-shrink: 0;
+    background: linear-gradient(135deg, var(--brand-accent-bright), var(--brand-accent));
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 800;
   }
-  .auth-btn.is-authed .auth-btn-dot {
-    display: inline-block;
-  }
-  /* 닉네임 너무 길면 자름 */
-  .auth-btn-label {
-    max-width: 14ch;
+  .hu-avatar-img { width: 100%; height: 100%; object-fit: cover; }
+  .hu-avatar-initial { line-height: 1; }
+
+  .hu-name {
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--brand-text);
+    max-width: 12ch;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  .hu-caret {
+    color: var(--brand-text-dim);
+    transition: transform 0.18s;
+  }
+  .hu[data-open='true'] .hu-caret { transform: rotate(180deg); }
+
+  /* 드롭다운 */
+  .hu-dropdown {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    min-width: 180px;
+    background: var(--brand-surface);
+    border: 1px solid var(--brand-border);
+    border-radius: 10px;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
+    padding: 8px;
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .hu-dropdown[hidden] { display: none; }
+  .hu-dropdown-name {
+    padding: 6px 10px 8px;
+    font-size: 11.5px;
+    font-weight: 800;
+    color: var(--brand-text-dim);
+    border-bottom: 1px solid var(--brand-border);
+    margin-bottom: 4px;
+    word-break: break-all;
+  }
+  .hu-dropdown-logout {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: none;
+    border: none;
+    color: var(--brand-text);
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 8px 10px;
+    border-radius: 6px;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+  }
+  .hu-dropdown-logout:hover {
+    background: rgba(220, 38, 38, 0.08);
+    color: var(--brand-danger);
+  }
+
   @media (max-width: 600px) {
-    .auth-btn { padding: 5px 10px; }
-    .auth-btn-label { max-width: 10ch; }
+    .hu-name { max-width: 8ch; }
   }
 </style>

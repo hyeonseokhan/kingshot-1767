@@ -13,6 +13,7 @@ export const ko = {
     loading: '로딩 중...',
     login: '로그인',
     logout: '로그아웃',
+    logoutConfirm: '로그아웃 하시겠습니까?',
     sortBy: '정렬',
     contents: '목차',
     // 킹샷 ID 조회 실패 시 사용자 친화 메시지 (members/coupons/blacklist 공유).

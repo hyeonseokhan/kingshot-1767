@@ -14,6 +14,7 @@ export const en: Translations = {
     loading: 'Loading...',
     login: 'Sign In',
     logout: 'Sign Out',
+    logoutConfirm: 'Sign out?',
     sortBy: 'Sort',
     contents: 'Contents',
     playerLookupNotFound: "Player ID not found. Please double-check the ID.",

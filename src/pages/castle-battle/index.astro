@@ -12,8 +12,10 @@ import '@/styles/castle-battle.css';
   title="캐슬 전투 — 1767 서버 허브"
   description="캐슬 전투 회차별 거점 점령 집결자 예측 투표"
 >
-  {/* 운영자 popover — 헤더의 header-actions slot 으로 주입 (AuthButton/LangSwitcher 좌측에 위치). */}
-  <details class="cb-admin-pop" slot="header-actions">
+  {/* 운영자 popover — 헤더의 header-actions slot 으로 주입.
+       SSR 기본 hidden — 로그인 사용자의 kingshot_id 가 ADMIN_IDS 에 포함될 때만
+       하단 인라인 스크립트가 hidden 해제. */}
+  <details class="cb-admin-pop" id="cb-admin-pop-root" slot="header-actions" hidden>
     <summary>🛠 운영자</summary>
     <div class="cb-admin-pop-panel">
       <div class="cb-admin-pop-head">🛠️ 운영자 패널</div>
@@ -57,6 +59,35 @@ import '@/styles/castle-battle.css';
   <script>
     import '@/scripts/pages/castle-battle';
     // 'app-open-auth' 는 BaseLayout 의 공용 AuthDialog 가 처리 — 캐슬에서도 동일.
+
+    // === 운영자 게이트 ===
+    // 추후 cb_admins 테이블 (CLAUDE.md NEW_SERVICE.md 데이터 모델) 으로 이관 예정 —
+    // 현재는 클라이언트측 화이트리스트 (mockup 단계).
+    const ADMIN_IDS: ReadonlyArray<string> = ['270680423'];
+    const AUTH_KEY = 'pnx-sk-auth-v1';
+
+    function isAdmin(): boolean {
+      try {
+        const raw = localStorage.getItem(AUTH_KEY);
+        if (!raw) return false;
+        const obj = JSON.parse(raw);
+        const id: string | undefined = obj?.record?.kingshot_id;
+        return typeof id === 'string' && ADMIN_IDS.includes(id);
+      } catch {
+        return false;
+      }
+    }
+    function syncAdminGate(): void {
+      const root = document.getElementById('cb-admin-pop-root');
+      if (!root) return;
+      if (isAdmin()) root.removeAttribute('hidden');
+      else root.setAttribute('hidden', '');
+    }
+    document.addEventListener('app-auth-changed', syncAdminGate);
+    window.addEventListener('storage', (e) => {
+      if (e.key === AUTH_KEY) syncAdminGate();
+    });
+    syncAdminGate();
   </script>
 </CastleBattleLayout>
 
