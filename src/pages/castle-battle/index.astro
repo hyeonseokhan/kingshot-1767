@@ -35,23 +35,26 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
       <div class="cb-admin-pop-head">🛠 관리자 도구</div>
       <div class="cb-admin-pop-body">
 
-        {/* 회차 관리 */}
-        <div class="cb-admin-group">
-          <div class="cb-admin-group-label">회차 관리</div>
-          <div class="cb-admin-group-actions">
-            <button class="cb-btn cb-btn-sm" id="cb-admin-new-round-btn">＋ 신규 회차 등록</button>
+        <div class="cb-admin-loading" id="cb-admin-loading" hidden>확인 중...</div>
+
+        {/* 설정 단계 섹션 */}
+        <div class="cb-admin-section" id="cb-admin-setup-section" hidden>
+          <div class="cb-admin-section-label">설정 단계</div>
+          <div class="cb-admin-section-actions">
+            <button class="cb-btn cb-btn-sm" id="cb-admin-new-round-btn" hidden>＋ 신규 회차 등록</button>
+            <button class="cb-btn cb-btn-secondary cb-btn-sm" id="cb-admin-edit-round-btn" hidden>✏ 회차 수정</button>
           </div>
         </div>
 
-        {/* 진행 중인 회차가 있을 때만 표시되는 영역 */}
-        <div class="cb-admin-group" id="cb-admin-active-group" hidden>
-          <div class="cb-admin-group-label">현재 회차</div>
-          <div class="cb-admin-group-actions">
-            <button class="cb-btn cb-btn-sm" id="cb-admin-voting-btn">투표 시작</button>
-            <button class="cb-btn cb-btn-sm" id="cb-admin-close-btn">투표 마감</button>
-            <button class="cb-btn cb-btn-secondary cb-btn-sm" id="cb-admin-next-btn">다음 단계로</button>
+        {/* 진행 단계 섹션 */}
+        <div class="cb-admin-section" id="cb-admin-vote-section" hidden>
+          <div class="cb-admin-section-label">진행 단계</div>
+          <div class="cb-admin-section-actions">
+            <button class="cb-btn cb-btn-sm" id="cb-admin-start-vote-btn" hidden>▶ 투표 시작</button>
+            <button class="cb-btn cb-btn-sm" id="cb-admin-close-vote-btn" hidden>⏹ 투표 마감</button>
+            <button class="cb-btn cb-btn-danger cb-btn-sm" id="cb-admin-reset-vote-btn" hidden>↺ 투표 초기화</button>
           </div>
-          <div class="cb-admin-round-status" id="cb-admin-round-status"></div>
+          <div class="cb-admin-section-err" id="cb-admin-section-err"></div>
         </div>
 
       </div>
@@ -114,6 +117,32 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
         </div>
       </div>
 
+    </div>
+  </dialog>
+
+  {/* 회차 수정 다이얼로그 */}
+  <dialog class="cb-edit-dlg" id="cb-edit-dlg">
+    <div class="cb-nr-inner">
+      <div class="cb-nr-header">
+        <h2 class="cb-nr-title">회차 수정</h2>
+      </div>
+      <div class="cb-nr-body">
+        <div class="cb-nr-section">
+          <div class="cb-nr-field">
+            <label class="cb-nr-label" for="cb-edit-date-input">
+              이벤트 시작 일시 <span class="cb-nr-label-note">KST 기준</span>
+            </label>
+            <input class="cb-nr-input" type="datetime-local" id="cb-edit-date-input" />
+          </div>
+        </div>
+      </div>
+      <div class="cb-nr-footer">
+        <button class="cb-btn cb-btn-danger cb-btn-sm" id="cb-edit-delete-btn">회차 삭제</button>
+        <div class="cb-nr-actions">
+          <button class="cb-btn cb-btn-secondary cb-btn-sm" id="cb-edit-cancel">취소</button>
+          <button class="cb-btn cb-btn-sm" id="cb-edit-submit">저장</button>
+        </div>
+      </div>
     </div>
   </dialog>
 
@@ -182,13 +211,123 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
     return res.json();
   }
 
-  // PIN 입력 다이얼로그 — 더 이상 사용하지 않음 (세션에서 자동 포함)
-  function promptPin(): Promise<string | null> {
-    return new Promise((resolve) => {
-      const pin = window.prompt('관리자 PIN 4자리를 입력하세요.');
-      resolve(pin?.trim() || null);
-    });
+  // ─── 관리자 패널 동기화 ──────────────────────────────────────
+
+  type RoundStatus = 'preparing' | 'voting' | 'voting_closed' | 'results_in' | 'archived';
+  let adminCurrentRoundId: number | null = null;
+
+  function showEl(id: string, show: boolean): void {
+    const el = document.getElementById(id);
+    if (el) el.hidden = !show;
   }
+
+  function syncAdminPanel(round: { id: number; status: RoundStatus } | null): void {
+    adminCurrentRoundId = round?.id ?? null;
+    const status = round?.status ?? null;
+
+    const hasRound = !!round && status !== 'archived';
+    const isPreparing = status === 'preparing';
+    const isVoting = status === 'voting';
+
+    showEl('cb-admin-loading', false);
+    showEl('cb-admin-setup-section', true);
+    showEl('cb-admin-vote-section', hasRound);
+
+    // 설정 단계 버튼
+    showEl('cb-admin-new-round-btn', !hasRound);
+    showEl('cb-admin-edit-round-btn', isPreparing);
+
+    // 진행 단계 버튼
+    showEl('cb-admin-start-vote-btn', isPreparing);
+    showEl('cb-admin-close-vote-btn', isVoting);
+    showEl('cb-admin-reset-vote-btn', isVoting);
+
+    const errEl = document.getElementById('cb-admin-section-err');
+    if (errEl) errEl.textContent = '';
+  }
+
+  // 패널이 열릴 때 현재 회차 조회
+  document.getElementById('cb-admin-pop-root')?.addEventListener('toggle', async (e) => {
+    const pop = e.currentTarget as HTMLDetailsElement;
+    if (!pop.open) return;
+    showEl('cb-admin-loading', true);
+    showEl('cb-admin-setup-section', false);
+    showEl('cb-admin-vote-section', false);
+    try {
+      const res = await callFn({ action: 'get-current-round' });
+      syncAdminPanel(res.round ?? null);
+    } catch {
+      showEl('cb-admin-loading', false);
+    }
+  });
+
+  // 진행 단계 공통 액션 핸들러
+  async function handleVoteAction(action: string, confirmMsg?: string): Promise<void> {
+    if (adminCurrentRoundId === null) return;
+    if (confirmMsg) {
+      const ok = await (window as any).appConfirm?.(confirmMsg, { variant: 'danger' }) ?? window.confirm(confirmMsg);
+      if (!ok) return;
+    }
+    const errEl = document.getElementById('cb-admin-section-err');
+    try {
+      const res = await callFn({ action, round_id: adminCurrentRoundId });
+      if (!res.ok) {
+        if (errEl) errEl.textContent = `오류: ${res.error}`;
+        return;
+      }
+      window.location.reload();
+    } catch (err) {
+      if (errEl) errEl.textContent = '네트워크 오류';
+    }
+  }
+
+  // ─── 회차 수정 다이얼로그 ────────────────────────────────────
+
+  function openEditDlg(eventStartsAt: string): void {
+    const dlg = document.getElementById('cb-edit-dlg') as HTMLDialogElement;
+    const input = document.getElementById('cb-edit-date-input') as HTMLInputElement;
+    // ISO → datetime-local (KST = UTC+9)
+    const kst = new Date(new Date(eventStartsAt).getTime() + 9 * 3600 * 1000);
+    input.value = kst.toISOString().slice(0, 16);
+    dlg.showModal();
+  }
+  function closeEditDlg(): void {
+    (document.getElementById('cb-edit-dlg') as HTMLDialogElement)?.close();
+  }
+
+  document.getElementById('cb-edit-cancel')?.addEventListener('click', closeEditDlg);
+  document.getElementById('cb-edit-dlg')?.addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) e.preventDefault();
+  });
+
+  document.getElementById('cb-edit-delete-btn')?.addEventListener('click', async () => {
+    if (adminCurrentRoundId === null) return;
+    const ok = await (window as any).appConfirm?.('회차를 삭제하면 모든 후보, 투표 데이터가 함께 삭제됩니다. 삭제하시겠습니까?', { variant: 'danger' })
+      ?? window.confirm('회차를 삭제하시겠습니까?');
+    if (!ok) return;
+    try {
+      const res = await callFn({ action: 'admin-delete-round', round_id: adminCurrentRoundId });
+      if (res.ok) { closeEditDlg(); window.location.reload(); }
+    } catch { /* ignore */ }
+  });
+
+  document.getElementById('cb-edit-submit')?.addEventListener('click', async () => {
+    if (adminCurrentRoundId === null) return;
+    const input = document.getElementById('cb-edit-date-input') as HTMLInputElement;
+    if (!input.value) return;
+    const kstMs = new Date(input.value).getTime() - 9 * 3600 * 1000; // KST → UTC
+    const isoUtc = new Date(kstMs).toISOString();
+    try {
+      const res = await callFn({ action: 'admin-update-round', round_id: adminCurrentRoundId, event_starts_at: isoUtc });
+      if (res.ok) { closeEditDlg(); window.location.reload(); }
+    } catch { /* ignore */ }
+  });
+
+  document.getElementById('cb-admin-edit-round-btn')?.addEventListener('click', async () => {
+    if (adminCurrentRoundId === null) return;
+    const res = await callFn({ action: 'get-current-round' });
+    if (res.round) openEditDlg(res.round.event_starts_at);
+  });
 
   // ─── 슬롯 렌더 ───────────────────────────────────────────────
 
@@ -443,6 +582,30 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
   document.getElementById('cb-admin-new-round-btn')?.addEventListener('click', openNewRoundDlg);
   document.getElementById('cb-nr-cancel')?.addEventListener('click', closeNewRoundDlg);
   document.getElementById('cb-nr-submit')?.addEventListener('click', submitNewRound);
+
+  document.getElementById('cb-admin-start-vote-btn')?.addEventListener('click', async () => {
+    if (adminCurrentRoundId === null) return;
+    const errEl = document.getElementById('cb-admin-section-err');
+    try {
+      const res = await callFn({ action: 'admin-set-round-status', round_id: adminCurrentRoundId, status: 'voting' });
+      if (!res.ok) { if (errEl) errEl.textContent = `오류: ${res.error}`; return; }
+      window.location.reload();
+    } catch { if (errEl) errEl.textContent = '네트워크 오류'; }
+  });
+
+  document.getElementById('cb-admin-close-vote-btn')?.addEventListener('click', async () => {
+    if (adminCurrentRoundId === null) return;
+    const errEl = document.getElementById('cb-admin-section-err');
+    try {
+      const res = await callFn({ action: 'admin-set-round-status', round_id: adminCurrentRoundId, status: 'voting_closed' });
+      if (!res.ok) { if (errEl) errEl.textContent = `오류: ${res.error}`; return; }
+      window.location.reload();
+    } catch { if (errEl) errEl.textContent = '네트워크 오류'; }
+  });
+
+  document.getElementById('cb-admin-reset-vote-btn')?.addEventListener('click', () =>
+    handleVoteAction('admin-reset-votes', '모든 투표를 초기화하고 준비 중 상태로 돌아갑니다. 계속하시겠습니까?')
+  );
 </script>
 
 <style is:global>

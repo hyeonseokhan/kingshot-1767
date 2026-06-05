@@ -707,6 +707,48 @@ async function adminEnterResult(
   return { ok: true };
 }
 
+async function adminUpdateRound(
+  playerId: unknown,
+  pin: unknown,
+  roundId: unknown,
+  eventStartsAt: unknown,
+): Promise<{ ok: boolean }> {
+  await requireAdmin(playerId, pin);
+  if (typeof roundId !== "number" || !eventStartsAt) throw new Error("missing_field");
+  await dbPatch(`cb_rounds?id=eq.${roundId}`, { event_starts_at: eventStartsAt });
+  return { ok: true };
+}
+
+async function adminDeleteRound(
+  playerId: unknown,
+  pin: unknown,
+  roundId: unknown,
+): Promise<{ ok: boolean }> {
+  await requireAdmin(playerId, pin);
+  if (typeof roundId !== "number") throw new Error("missing_field");
+  // 연쇄 삭제: votes → candidates → targets → rounds
+  await dbDelete(`cb_votes?round_id=eq.${roundId}`);
+  const targets = await dbSelect(`cb_targets?round_id=eq.${roundId}&select=id`);
+  for (const t of targets) {
+    await dbDelete(`cb_candidates?target_id=eq.${t.id}`);
+  }
+  await dbDelete(`cb_targets?round_id=eq.${roundId}`);
+  await dbDelete(`cb_rounds?id=eq.${roundId}`);
+  return { ok: true };
+}
+
+async function adminResetVotes(
+  playerId: unknown,
+  pin: unknown,
+  roundId: unknown,
+): Promise<{ ok: boolean }> {
+  await requireAdmin(playerId, pin);
+  if (typeof roundId !== "number") throw new Error("missing_field");
+  await dbDelete(`cb_votes?round_id=eq.${roundId}`);
+  await dbPatch(`cb_rounds?id=eq.${roundId}`, { status: "preparing" });
+  return { ok: true };
+}
+
 // ─── 서버 ────────────────────────────────────────────────────
 
 Deno.serve(async (req: Request) => {
@@ -773,6 +815,15 @@ Deno.serve(async (req: Request) => {
         break;
       case "admin-enter-result":
         result = await adminEnterResult(body.player_id, body.pin, body.target_id, body.winning_candidate_id);
+        break;
+      case "admin-update-round":
+        result = await adminUpdateRound(body.player_id, body.pin, body.round_id, body.event_starts_at);
+        break;
+      case "admin-delete-round":
+        result = await adminDeleteRound(body.player_id, body.pin, body.round_id);
+        break;
+      case "admin-reset-votes":
+        result = await adminResetVotes(body.player_id, body.pin, body.round_id);
         break;
 
       default:
