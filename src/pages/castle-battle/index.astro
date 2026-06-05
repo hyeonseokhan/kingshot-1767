@@ -128,7 +128,7 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
       return obj?.record?.is_admin === true;
     } catch { return false; }
   }
-  function getAuthRecord(): { kingshot_id: string; is_admin: boolean } | null {
+  function getAuthRecord(): { kingshot_id: string; is_admin: boolean; pin?: string } | null {
     try {
       const obj = JSON.parse(localStorage.getItem(AUTH_KEY) ?? '');
       if (!obj?.record?.kingshot_id) return null;
@@ -168,7 +168,8 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
 
   async function callFn(body: Record<string, unknown>): Promise<any> {
     const auth = getAuthRecord();
-    const payload = auth ? { player_id: auth.kingshot_id, ...body } : body;
+    const base = auth ? { player_id: auth.kingshot_id, pin: auth.pin } : {};
+    const payload = { ...base, ...body };
     const res = await fetch(FN_URL, {
       method: 'POST',
       headers: {
@@ -181,7 +182,7 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
     return res.json();
   }
 
-  // PIN 입력 다이얼로그 — 관리자 액션마다 PIN 재확인
+  // PIN 입력 다이얼로그 — 더 이상 사용하지 않음 (세션에서 자동 포함)
   function promptPin(): Promise<string | null> {
     return new Promise((resolve) => {
       const pin = window.prompt('관리자 PIN 4자리를 입력하세요.');
@@ -380,9 +381,6 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
 
     if (!dateVal) { errEl.textContent = '이벤트 시작 일시를 선택해 주세요.'; return; }
 
-    const pin = await promptPin();
-    if (!pin || !/^\d{4}$/.test(pin)) { errEl.textContent = 'PIN 4자리를 입력해 주세요.'; return; }
-
     // 거점 데이터 수집
     type Candidate = { alliance_tag: string; rallier_nickname: string; kingshot_id?: string; profile_photo?: string };
     const slotsData: Array<{ slot: string; is_open: boolean; candidates: Candidate[] }> = [];
@@ -416,7 +414,6 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
       const eventStartsAt = new Date(dateVal).toISOString();
       const res = await callFn({
         action: 'admin-setup-round',
-        pin,
         event_starts_at: eventStartsAt,
         targets: slotsData,
       });
@@ -424,7 +421,7 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
       if (!res.ok) {
         const msgs: Record<string, string> = {
           not_admin: '관리자 권한이 없습니다.',
-          wrong_pin: 'PIN이 일치하지 않습니다.',
+          wrong_pin: '인증 정보가 만료되었습니다. 다시 로그인해 주세요.',
           missing_field: '필수 항목이 누락되었습니다.',
           unexpected_error: '이미 진행 중인 회차가 있거나 서버 오류가 발생했습니다.',
         };

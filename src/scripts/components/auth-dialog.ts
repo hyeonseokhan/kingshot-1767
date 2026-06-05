@@ -197,6 +197,7 @@ function init(): void {
         nickname: currentPlayer.nickname,
         avatar_url: currentPlayer.profile_photo,
         is_admin: json.is_admin ?? false,
+        pin,
       };
       try {
         localStorage.setItem(AUTH_KEY, JSON.stringify({ record }));
