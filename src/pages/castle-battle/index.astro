@@ -30,6 +30,30 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
   title="캐슬 전투 — 1767 서버 허브"
   description="캐슬 전투 회차별 거점 점령 집결자 예측 투표"
 >
+  {/* 운영자 팝오버 — header-actions slot 주입. SSR 기본 hidden → 클라이언트가 is_admin 확인 후 노출. */}
+  <details class="cb-admin-pop" id="cb-admin-pop-root" slot="header-actions" hidden>
+    <summary>🛠 운영자</summary>
+    <div class="cb-admin-pop-panel">
+      <div class="cb-admin-pop-head">🛠️ 운영자 패널</div>
+      <div class="cb-admin-pop-body">
+        <div class="cb-admin-group">
+          <div class="cb-admin-group-label">회차 상태</div>
+          <div class="cb-admin-group-actions">
+            <button class="cb-btn cb-btn-sm">투표 마감</button>
+            <button class="cb-btn cb-btn-secondary cb-btn-sm" disabled style="opacity:0.4">결과 입력 단계로</button>
+          </div>
+        </div>
+        <div class="cb-admin-group">
+          <div class="cb-admin-group-label">집결자 등록</div>
+          <div class="cb-admin-group-actions">
+            <button class="cb-btn cb-btn-sm">+ 후보 추가</button>
+            <button class="cb-btn cb-btn-secondary cb-btn-sm">연맹 관리</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </details>
+
   {round ? (
     <>
       <RoundHero round={round} roundIndex={round.id} totalVotes={totalVotes} />
@@ -46,6 +70,25 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
     </section>
   )}
 </CastleBattleLayout>
+
+<script>
+  // 운영자 팝오버 게이트 — members.is_admin 기반 (pnx-mb-auth-v1).
+  const AUTH_KEY = 'pnx-mb-auth-v1';
+  function checkAdmin(): boolean {
+    try {
+      const obj = JSON.parse(localStorage.getItem(AUTH_KEY) ?? '');
+      return obj?.record?.is_admin === true;
+    } catch { return false; }
+  }
+  function syncAdminGate(): void {
+    const root = document.getElementById('cb-admin-pop-root');
+    if (!root) return;
+    root.hidden = !checkAdmin();
+  }
+  document.addEventListener('app-auth-changed', syncAdminGate);
+  window.addEventListener('storage', (e) => { if (e.key === AUTH_KEY) syncAdminGate(); });
+  syncAdminGate();
+</script>
 
 <style is:global>
   .cb-empty-round {
