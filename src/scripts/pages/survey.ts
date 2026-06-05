@@ -296,6 +296,8 @@ function saveAuth(state: AuthState): void {
   applyUnlockState();
   syncHeaderLogoutBtn();
   syncListButtons();
+  // 헤더의 AuthButton (다른 컴포넌트) 도 닉네임 노출/숨김 sync.
+  document.dispatchEvent(new CustomEvent('app-auth-changed'));
   if (!wasUnlocked) {
     // 잠금 해제 첫 transition — 목록 자동 fetch (fire-and-forget).
     // 단순 record 갱신 (이미 unlocked) 인 경우엔 중복 fetch 회피.
@@ -325,6 +327,8 @@ function clearAuth(): void {
   applyUnlockState();
   syncHeaderLogoutBtn();
   syncListButtons();
+  // 헤더의 AuthButton 도 미인증 표시로 sync.
+  document.dispatchEvent(new CustomEvent('app-auth-changed'));
 }
 
 /** 헤더 우측 [로그아웃] 버튼 visibility — 인증 세션 유무 따라 hidden 토글.

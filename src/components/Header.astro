@@ -12,20 +12,6 @@ const activeTab = findActiveTab(Astro.url.pathname);
 
 <header class="app-header">
   <div class="app-header-inner">
-    <button
-      class="mobile-menu-btn"
-      id="mobile-menu-btn"
-      type="button"
-      aria-label="메뉴"
-      data-i18n-attr-aria-label="header.menuOpen"
-    >
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <line x1="3" y1="6" x2="21" y2="6"></line>
-        <line x1="3" y1="12" x2="21" y2="12"></line>
-        <line x1="3" y1="18" x2="21" y2="18"></line>
-      </svg>
-    </button>
-
     <a class="app-brand" href="/" aria-label="1767 서버 — 홈으로">
       <img src="/logo.png" alt="PNX" width="28" height="28" decoding="async" />
       <span class="app-brand-text" data-i18n="header.title">1767 서버</span>
@@ -49,6 +35,20 @@ const activeTab = findActiveTab(Astro.url.pathname);
       <AuthButton />
       <LangSwitcher />
     </div>
+
+    <button
+      class="mobile-menu-btn"
+      id="mobile-menu-btn"
+      type="button"
+      aria-label="메뉴"
+      data-i18n-attr-aria-label="header.menuOpen"
+    >
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <line x1="3" y1="6" x2="21" y2="6"></line>
+        <line x1="3" y1="12" x2="21" y2="12"></line>
+        <line x1="3" y1="18" x2="21" y2="18"></line>
+      </svg>
+    </button>
   </div>
 </header>
 

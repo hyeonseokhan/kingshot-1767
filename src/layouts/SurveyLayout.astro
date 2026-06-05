@@ -54,25 +54,11 @@ const { title = 'KVK Speed-up Survey', description = 'KVK speed-up inventory sur
   @media (max-width: 600px) {
     .survey-main { padding: 10px; }
   }
-  /* 헤더 안 로그아웃 버튼 — 인증 후에만 노출 (survey-kvk.ts 가 hidden 토글). */
+  /* sk-logout-btn: AuthButton 이 시각/UX 대체. DOM 에는 남겨 두어 survey.ts 의
+     onLogoutClick 핸들러를 AuthButton 이 programmatic click 으로 트리거할 수 있게.
+     visible 노출은 항상 차단. */
   .survey-logout-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 5px 10px;
-    border-radius: 6px;
-    background: rgba(15, 23, 42, 0.05);
-    border: 1px solid var(--brand-border);
-    color: var(--brand-text);
-    font: inherit;
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.15s, border-color 0.15s;
-  }
-  .survey-logout-btn:hover {
-    background: rgba(15, 23, 42, 0.08);
-    border-color: var(--brand-border-strong);
+    display: none !important;
   }
 
   /* footer 는 BaseLayout 의 app-footer 가 통합 제공 — survey-footer 룰은 제거. */

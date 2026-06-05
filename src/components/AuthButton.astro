@@ -1,28 +1,111 @@
 ---
-// 헤더의 "계정 인증" 버튼 — 모든 페이지 공통.
-// 클릭 시 'app-open-auth' CustomEvent 를 document 에 dispatch.
-// 각 페이지가 이 이벤트를 listen 해 자체 인증 다이얼로그 (KvK: sk-auth-dialog,
-// Castle: 추후 별도) 를 열게 한다.
+// 헤더의 "계정 인증" 버튼 — 모든 페이지 공통, 실제 인증 상태와 연동.
 //
-// 인증 상태 sync 는 후속 — 현재는 stateless visual 버튼.
+// 상태 source: localStorage('pnx-sk-auth-v1')
+//   = { token, expires_at, record: { kingshot_id, nickname, is_admin, ... } }
+//   survey.ts 의 saveAuth/clearAuth 가 관리.
+//
+// 상태 sync:
+//   1) 다른 탭 변경 → `storage` 이벤트
+//   2) 같은 탭 변경 → survey.ts 가 dispatch 하는 'app-auth-changed' 커스텀 이벤트
+//
+// 클릭 동작:
+//   - 미인증: 'app-open-auth' dispatch → 각 페이지가 본인 인증 다이얼로그 활성화
+//   - 인증됨: 기존 #sk-logout-btn 을 programmatic click → KvK 의 logout 흐름 재사용
+//             (confirm → token 무효화 → clearAuth → UI sync)
 ---
 
 <button class="auth-btn" id="app-auth-btn" type="button" data-i18n-attr-title="header.auth" title="계정 인증">
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-  </svg>
+  <span class="auth-btn-dot" aria-hidden="true"></span>
   <span class="auth-btn-label" data-i18n="header.auth">계정 인증</span>
 </button>
 
 <script>
   (function () {
+    const AUTH_KEY = 'pnx-sk-auth-v1';
     const btn = document.getElementById('app-auth-btn');
-    if (!btn) return;
+    const label = btn?.querySelector<HTMLElement>('.auth-btn-label');
+    if (!btn || !label) return;
+
+    interface AuthRecord {
+      kingshot_id: string;
+      nickname: string;
+      is_admin?: boolean;
+    }
+    interface AuthState {
+      token: string;
+      expires_at: string;
+      record: AuthRecord;
+    }
+
+    function readAuth(): AuthState | null {
+      try {
+        const raw = localStorage.getItem(AUTH_KEY);
+        if (!raw) return null;
+        const obj = JSON.parse(raw);
+        if (typeof obj?.token !== 'string' || !obj?.record) return null;
+        return obj as AuthState;
+      } catch {
+        return null;
+      }
+    }
+
+    // i18n 헬퍼 — 페이지 lang attribute 보고 키 swap. 키가 없으면 fallback 한국어.
+    function tt(): { auth: string; authed: string } {
+      const lang = document.documentElement.lang || 'ko';
+      return lang.startsWith('en')
+        ? { auth: 'Sign in', authed: 'Signed in' }
+        : { auth: '계정 인증', authed: '인증됨' };
+    }
+
+    function render() {
+      const auth = readAuth();
+      const { auth: authText } = tt();
+      if (auth) {
+        btn!.classList.add('is-authed');
+        label!.textContent = auth.record.nickname || '인증됨';
+        label!.removeAttribute('data-i18n'); // 동적 닉네임 — i18n swap 비대상
+        btn!.title = `로그아웃 (${auth.record.nickname})`;
+      } else {
+        btn!.classList.remove('is-authed');
+        label!.textContent = authText;
+        label!.setAttribute('data-i18n', 'header.auth');
+        btn!.title = '계정 인증';
+      }
+    }
+
     btn.addEventListener('click', () => {
-      // 각 페이지가 listen — KvK 는 sk-auth-dialog 를 열고, Castle 은 후속.
-      document.dispatchEvent(new CustomEvent('app-open-auth'));
+      const auth = readAuth();
+      if (auth) {
+        // 인증됨 → KvK 의 기존 sk-logout-btn 을 programmatic click (confirm + 토큰 무효화 흐름 재사용).
+        const logoutBtn = document.getElementById('sk-logout-btn') as HTMLButtonElement | null;
+        if (logoutBtn) {
+          logoutBtn.click();
+        } else {
+          // KvK 페이지가 아니면 (Castle 등) 로그아웃 핸들러 직접 호출 fallback
+          if (confirm('로그아웃 하시겠습니까?')) {
+            try { localStorage.removeItem(AUTH_KEY); } catch { /* */ }
+            document.dispatchEvent(new CustomEvent('app-auth-changed'));
+          }
+        }
+      } else {
+        // 미인증 → 각 페이지가 listen 해 본인 인증 다이얼로그 활성화
+        document.dispatchEvent(new CustomEvent('app-open-auth'));
+      }
     });
+
+    // 상태 변화 sync — 같은 탭 + 다른 탭
+    document.addEventListener('app-auth-changed', render);
+    window.addEventListener('storage', (e) => {
+      if (e.key === AUTH_KEY) render();
+    });
+    // i18n 언어 swap 도 다시 그려야 함 (현재는 lang attr 변경 감지)
+    new MutationObserver(render).observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['lang'],
+    });
+
+    render();
   })();
 </script>
 
@@ -30,8 +113,8 @@
   .auth-btn {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    padding: 5px 10px;
+    gap: 6px;
+    padding: 5px 12px;
     border-radius: 6px;
     background: rgba(124, 58, 237, 0.10);
     border: 1px solid rgba(124, 58, 237, 0.35);
@@ -47,12 +130,37 @@
     background: rgba(124, 58, 237, 0.16);
     border-color: rgba(124, 58, 237, 0.50);
   }
-  .auth-btn svg {
-    flex-shrink: 0;
+  /* 인증된 상태: cyan 톤 (KvK 의 voted 색과 일관) — "활성 세션" 식별 */
+  .auth-btn.is-authed {
+    background: rgba(14, 116, 144, 0.10);
+    border-color: rgba(14, 116, 144, 0.40);
+    color: var(--brand-info);
   }
-  /* 모바일에선 라벨 숨김, 아이콘만 */
+  .auth-btn.is-authed:hover {
+    background: rgba(14, 116, 144, 0.16);
+    border-color: rgba(14, 116, 144, 0.55);
+  }
+  /* dot — 인증됨 상태에서만 노출 (CSS 로 미인증 hide) */
+  .auth-btn-dot {
+    display: none;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--brand-info);
+    box-shadow: 0 0 6px rgba(14, 116, 144, 0.65);
+  }
+  .auth-btn.is-authed .auth-btn-dot {
+    display: inline-block;
+  }
+  /* 닉네임 너무 길면 자름 */
+  .auth-btn-label {
+    max-width: 14ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   @media (max-width: 600px) {
-    .auth-btn { padding: 5px 8px; }
-    .auth-btn-label { display: none; }
+    .auth-btn { padding: 5px 10px; }
+    .auth-btn-label { max-width: 10ch; }
   }
 </style>
