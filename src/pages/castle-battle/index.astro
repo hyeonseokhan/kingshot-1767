@@ -235,7 +235,14 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
         <button class="cb-nr-cand-del" type="button" title="삭제">✕</button>
       </div>
       <div class="cb-nr-cand-result" hidden>
-        <span class="cb-nr-cand-result-nick"></span>
+        <div class="cb-nr-badge">
+          <span class="cb-nr-badge-avatar">
+            <img class="cb-nr-badge-img" alt="" hidden />
+            <span class="cb-nr-badge-initial"></span>
+          </span>
+          <span class="cb-nr-badge-nick"></span>
+        </div>
+        <span class="cb-nr-cand-err"></span>
       </div>
     `;
 
@@ -244,7 +251,11 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
     const lookupBtn = row.querySelector('.cb-nr-lookup-btn') as HTMLButtonElement;
     const ksidInput = row.querySelector('.cb-nr-cand-ksid') as HTMLInputElement;
     const resultEl = row.querySelector('.cb-nr-cand-result') as HTMLElement;
-    const resultNick = row.querySelector('.cb-nr-cand-result-nick') as HTMLElement;
+    const badge = row.querySelector('.cb-nr-badge') as HTMLElement;
+    const badgeImg = row.querySelector('.cb-nr-badge-img') as HTMLImageElement;
+    const badgeInitial = row.querySelector('.cb-nr-badge-initial') as HTMLElement;
+    const badgeNick = row.querySelector('.cb-nr-badge-nick') as HTMLElement;
+    const errEl = row.querySelector('.cb-nr-cand-err') as HTMLElement;
 
     lookupBtn.addEventListener('click', async () => {
       const ksid = ksidInput.value.trim();
@@ -256,20 +267,36 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
       lookupBtn.textContent = '...';
       row.dataset.nickname = '';
       row.dataset.profilePhoto = '';
+      badge.hidden = true;
+      errEl.textContent = '';
       resultEl.hidden = true;
 
       try {
         const res = await callFn({ action: 'lookup-player', kingshot_id: ksid });
+        resultEl.hidden = false;
         if (res.ok) {
-          row.dataset.nickname = res.nickname ?? '';
-          row.dataset.profilePhoto = res.profile_photo ?? '';
-          resultNick.textContent = `✓ ${res.nickname}`;
-          resultEl.hidden = false;
+          const nick: string = res.nickname ?? '';
+          const photo: string = res.profile_photo ?? '';
+          row.dataset.nickname = nick;
+          row.dataset.profilePhoto = photo;
+
+          // 아바타 — 이미지 or 이니셜
+          if (photo) {
+            badgeImg.src = photo;
+            badgeImg.hidden = false;
+            badgeInitial.hidden = true;
+          } else {
+            badgeImg.hidden = true;
+            badgeInitial.textContent = nick.charAt(0).toUpperCase() || '?';
+            badgeInitial.hidden = false;
+          }
+          badgeNick.textContent = nick;
+          badge.hidden = false;
+          errEl.textContent = '';
           lookupBtn.textContent = '재조회';
         } else {
-          resultNick.textContent = '플레이어를 찾을 수 없습니다';
-          resultNick.style.color = 'var(--cb-red)';
-          resultEl.hidden = false;
+          badge.hidden = true;
+          errEl.textContent = '플레이어를 찾을 수 없습니다';
           lookupBtn.textContent = '조회';
         }
       } catch {

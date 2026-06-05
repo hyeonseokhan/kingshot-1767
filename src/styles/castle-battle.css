@@ -1111,10 +1111,59 @@
 .cb-nr-lookup-btn:hover { filter: brightness(1.1); }
 .cb-nr-lookup-btn:disabled { opacity: 0.55; cursor: default; }
 .cb-nr-cand-result {
-  padding: 3px 4px 0;
-  font-size: 12px;
+  padding: 4px 2px 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.cb-nr-cand-err {
+  font-size: 11.5px;
   font-weight: 600;
+  color: var(--cb-red);
+}
+.cb-nr-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 10px 4px 4px;
+  background: rgba(5, 150, 105, 0.08);
+  border: 1px solid rgba(5, 150, 105, 0.28);
+  border-radius: 999px;
+  animation: cb-badge-in 0.18s ease-out;
+}
+@keyframes cb-badge-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.cb-nr-badge-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, var(--cb-accent-bright, #a78bfa), var(--cb-accent, #7c3aed));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+  color: #fff;
+}
+.cb-nr-badge-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.cb-nr-badge-initial { line-height: 1; }
+.cb-nr-badge-nick {
+  font-size: 12.5px;
+  font-weight: 700;
   color: var(--cb-success);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .cb-nr-cand-del {
   background: none;
