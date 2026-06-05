@@ -10,33 +10,40 @@ export type CbRoundStatus =
   | 'results_in'
   | 'archived';
 
-export type CbTargetSlot = 'castle' | 'turret_11' | 'turret_2' | 'turret_5' | 'turret_7';
+export type CbTargetSlot =
+  | 'castle'
+  | 'turret_north'
+  | 'turret_east'
+  | 'turret_south'
+  | 'turret_west';
 
-/** 슬롯 표시명 (UI 라벨). 게임 내 시계 방향 표기. */
+/** 슬롯 표시명 (UI 라벨) — 동서남북 cardinal. */
 export const SLOT_LABEL: Record<CbTargetSlot, string> = {
   castle: '캐슬',
-  turret_11: '11시 포탑',
-  turret_2: '2시 포탑',
-  turret_5: '5시 포탑',
-  turret_7: '7시 포탑',
+  turret_north: '북쪽 포탑',
+  turret_east: '동쪽 포탑',
+  turret_south: '남쪽 포탑',
+  turret_west: '서쪽 포탑',
 };
 
-/** 컴파스 SVG 의 active dot 위치 (cx, cy in viewBox 0..24). */
-export const SLOT_COMPASS: Record<CbTargetSlot, { cx: number; cy: number } | null> = {
-  castle: { cx: 12, cy: 12 }, // center
-  turret_11: { cx: 9, cy: 5 }, // 11시 방향
-  turret_2: { cx: 19, cy: 6 }, // 2시
-  turret_5: { cx: 19, cy: 18 }, // 5시
-  turret_7: { cx: 5, cy: 18 }, // 7시
+/** 컴파스 SVG dot 좌표 (cx, cy in viewBox 0..24).
+ *  cardinal 4 위치 (N=상, E=우, S=하, W=좌) + 중앙 캐슬.
+ */
+export const SLOT_COMPASS: Record<CbTargetSlot, { cx: number; cy: number }> = {
+  castle: { cx: 12, cy: 12 },
+  turret_north: { cx: 12, cy: 4 },
+  turret_east: { cx: 20, cy: 12 },
+  turret_south: { cx: 12, cy: 20 },
+  turret_west: { cx: 4, cy: 12 },
 };
 
-/** 렌더링 순서 (좌→우, 시계 방향). 캐슬 가운데. */
+/** 렌더링 순서 (좌→우) — 서/북/캐슬/동/남. */
 export const SLOT_RENDER_ORDER: CbTargetSlot[] = [
-  'turret_7',
-  'turret_11',
+  'turret_west',
+  'turret_north',
   'castle',
-  'turret_2',
-  'turret_5',
+  'turret_east',
+  'turret_south',
 ];
 
 export interface CbRound {

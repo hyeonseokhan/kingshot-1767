@@ -1,0 +1,479 @@
+---
+// 거점 상세 다이얼로그 — 카드 클릭 시 활성화.
+//
+// 구조:
+//   header (이미지 hero — 거점명 + 1위 pill + 메타)
+//   body (스크롤) — 후보 row 들 (펼치기 → voter chip 그리드)
+//   footer (닫기)
+//
+// 핵심 룰: ⚠️ CLAUDE.md UI — position:fixed + inset:0 + margin:auto 로 화면 중앙.
+// voter chip 펼치기는 native <details> 사용 — body 가 overflow:auto 라 영역 내 스크롤 자연 작동.
+// voter 정보 (profile_photo + 닉네임) 는 클라이언트 측에서 fetch (lazy — 펼침 시 1회).
+import type { TargetView } from '@/lib/castle-battle/types';
+import { SLOT_LABEL } from '@/lib/castle-battle/types';
+import Compass from './Compass.astro';
+
+interface Props {
+  targets: TargetView[];
+}
+const { targets } = Astro.props;
+---
+
+<dialog class="cb-detail-dialog" id="cb-detail-dialog" aria-labelledby="cb-detail-title">
+  <button
+    class="cb-detail-close"
+    type="button"
+    aria-label="닫기"
+    onclick="this.closest('dialog').close()"
+  >✕</button>
+
+  {targets.map((t) => {
+    const slotLabel = SLOT_LABEL[t.slot];
+    const isCastle = t.slot === 'castle';
+    const isFree = !t.is_open;
+    const imgUrl = isCastle ? '/castle-battle/캐슬.png' : '/castle-battle/포탑.png';
+    return (
+      <section
+        class="cb-detail-target"
+        data-target-id={t.target_id}
+        data-slot={t.slot}
+        hidden
+      >
+        <header class="cb-detail-hero">
+          <div class="cb-detail-hero-img" style={`background-image:url('${imgUrl}')`}></div>
+          <div class="cb-detail-hero-overlay"></div>
+          <div class="cb-detail-hero-content">
+            <div class="cb-detail-hero-row">
+              <Compass slot={t.slot} />
+              <span class="cb-detail-hero-title" id="cb-detail-title">{slotLabel}</span>
+            </div>
+            {!isFree && t.leader && (
+              <div class="cb-detail-leader-pill">
+                1위 <strong>{t.leader.alliance_tag} {t.leader.rallier_nickname}</strong>
+                {' '}· {t.leader.vote_count}표 · {t.leader.vote_pct}%
+              </div>
+            )}
+            <div class="cb-detail-hero-meta">
+              <span>총 {t.total_votes}표 · {t.candidates.length}명 후보</span>
+            </div>
+          </div>
+        </header>
+
+        <div class="cb-detail-body">
+          {isFree ? (
+            <div class="cb-detail-free">
+              <div class="cb-detail-free-main">자유전투</div>
+              <p class="cb-detail-free-body">
+                이번 회차는 베팅 대상에서 제외된 거점입니다.
+              </p>
+            </div>
+          ) : t.candidates.length === 0 ? (
+            <div class="cb-detail-empty">등록된 집결자가 없습니다</div>
+          ) : (
+            t.candidates.map((c) => (
+              <details
+                class:list={[
+                  'cb-detail-cand',
+                  { 'is-leading': c.candidate_id === t.leader?.candidate_id, 'is-mine': c.is_mine },
+                ]}
+                data-candidate-id={c.candidate_id}
+              >
+                <summary>
+                  <div class="cb-detail-cand-info">
+                    <span class="cb-cand-tag">{c.alliance_tag}</span>
+                    <span class="cb-detail-cand-name">{c.rallier_nickname}</span>
+                    {c.is_mine && <span class="cb-detail-cand-mine">✓ 내 표</span>}
+                    <span class="cb-detail-cand-spacer"></span>
+                    <span class="cb-detail-cand-count">{c.vote_count}표</span>
+                    <span class="cb-detail-cand-pct">{c.vote_pct}%</span>
+                    <svg class="cb-detail-cand-chevron" viewBox="0 0 12 12" aria-hidden="true">
+                      <path d="M3 4.5 L6 8 L9 4.5" stroke="currentColor" stroke-width="1.5"
+                            fill="none" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                  </div>
+                  <div class="cb-detail-cand-bar"><div style={`width:${c.vote_pct}%`}></div></div>
+                </summary>
+                <div class="cb-voters" data-candidate-id={c.candidate_id} data-loaded="false">
+                  <div class="cb-voters-loading">투표자 불러오는 중…</div>
+                </div>
+              </details>
+            ))
+          )}
+        </div>
+
+        <footer class="cb-detail-footer">
+          <button
+            class="cb-btn cb-btn-secondary"
+            type="button"
+            onclick="this.closest('dialog').close()"
+          >닫기</button>
+        </footer>
+      </section>
+    );
+  })}
+</dialog>
+
+<script>
+  // 카드 클릭 → 다이얼로그 + 해당 target section 만 노출.
+  // voter chip 펼침 → lazy fetch (cb_votes JOIN members).
+  import { getVoters } from '@/lib/castle-battle/queries';
+  import type { VoterView } from '@/lib/castle-battle/types';
+
+  const AUTH_KEY = 'pnx-sk-auth-v1';
+  function myKsId(): string | null {
+    try {
+      const raw = localStorage.getItem(AUTH_KEY);
+      if (!raw) return null;
+      const obj = JSON.parse(raw);
+      return obj?.record?.kingshot_id ?? null;
+    } catch { return null; }
+  }
+
+  function init() {
+    const dlg = document.getElementById('cb-detail-dialog') as HTMLDialogElement | null;
+    if (!dlg) return;
+
+    const sections = dlg.querySelectorAll<HTMLElement>('.cb-detail-target');
+
+    // 카드 클릭 → 해당 target section 표시 + 다이얼로그 오픈
+    document.querySelectorAll<HTMLElement>('.cb-target:not(.is-free)').forEach((card) => {
+      card.style.cursor = 'pointer';
+      card.addEventListener('click', () => {
+        const tid = card.dataset.targetId;
+        if (!tid) return;
+        sections.forEach((s) => s.toggleAttribute('hidden', s.dataset.targetId !== tid));
+        if (typeof dlg.showModal === 'function') dlg.showModal();
+        else dlg.setAttribute('open', '');
+      });
+    });
+    // backdrop 클릭 시 닫기
+    dlg.addEventListener('click', (e) => {
+      if (e.target === dlg) dlg.close();
+    });
+
+    // voter chip lazy fetch — details 펼침 시 1회만.
+    dlg.querySelectorAll<HTMLDetailsElement>('details.cb-detail-cand').forEach((det) => {
+      det.addEventListener('toggle', async () => {
+        if (!det.open) return;
+        const wrap = det.querySelector<HTMLElement>('.cb-voters');
+        if (!wrap || wrap.dataset.loaded === 'true') return;
+        const cid = Number(wrap.dataset.candidateId);
+        if (!cid) return;
+        try {
+          const voters: VoterView[] = await getVoters(cid, myKsId());
+          renderVoters(wrap, voters);
+          wrap.dataset.loaded = 'true';
+        } catch (e) {
+          wrap.innerHTML = '<div class="cb-voters-error">투표자 조회 실패</div>';
+        }
+      });
+    });
+  }
+
+  function renderVoters(wrap: HTMLElement, voters: VoterView[]): void {
+    wrap.innerHTML = '';
+    if (voters.length === 0) {
+      wrap.innerHTML = '<div class="cb-voters-empty">아직 투표자가 없습니다</div>';
+      return;
+    }
+    for (const v of voters) {
+      const chip = document.createElement('span');
+      chip.className = 'cb-voter' + (v.is_me ? ' is-me' : '');
+      const avatarHtml = v.profile_photo
+        ? `<img src="${escapeAttr(v.profile_photo)}" alt="" loading="lazy" decoding="async">`
+        : `<span class="cb-voter-avatar-initial">${escapeHtml((v.nickname || '?').charAt(0))}</span>`;
+      chip.innerHTML =
+        `<span class="cb-voter-avatar">${avatarHtml}</span>` +
+        `<span class="cb-voter-name">${escapeHtml(v.nickname)}</span>`;
+      wrap.appendChild(chip);
+    }
+  }
+  function escapeHtml(s: string): string {
+    return s.replace(/[&<>"']/g, (c) =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!,
+    );
+  }
+  function escapeAttr(s: string): string { return escapeHtml(s); }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+</script>
+
+<style>
+  /* ⚠️ CLAUDE.md UI — 중앙 정렬 */
+  .cb-detail-dialog {
+    position: fixed;
+    inset: 0;
+    margin: auto;
+    width: 560px;
+    max-width: calc(100vw - 32px);
+    height: 680px;
+    max-height: 86vh;
+    padding: 0;
+    border: none;
+    border-radius: 14px;
+    background: var(--cb-surface);
+    color: var(--cb-text);
+    overflow: hidden;
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.32);
+  }
+  .cb-detail-dialog[open] {
+    display: flex;
+    flex-direction: column;
+    animation: cb-dlg-in 0.20s ease-out;
+  }
+  .cb-detail-dialog::backdrop {
+    background: rgba(15, 23, 42, 0.55);
+    backdrop-filter: blur(4px);
+  }
+  @keyframes cb-dlg-in {
+    from { opacity: 0; transform: translateY(12px) scale(0.985); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  /* 동시에 한 target section 만 노출. 그 안이 flex column. */
+  .cb-detail-target {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .cb-detail-target[hidden] { display: none; }
+
+  /* close 버튼 — hero 위 */
+  .cb-detail-close {
+    position: absolute;
+    top: 12px; right: 12px;
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+    cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    z-index: 2;
+    font-size: 16px;
+    transition: background 0.15s;
+  }
+  .cb-detail-close:hover { background: rgba(0, 0, 0, 0.78); }
+
+  /* hero */
+  .cb-detail-hero {
+    position: relative;
+    height: 170px;
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+  .cb-detail-hero-img {
+    position: absolute; inset: 0;
+    background-size: cover; background-position: center;
+  }
+  .cb-detail-hero-overlay {
+    position: absolute; inset: 0;
+    background: linear-gradient(180deg,
+      rgba(15, 23, 42, 0.20) 0%,
+      rgba(15, 23, 42, 0.60) 55%,
+      rgba(15, 23, 42, 0.92) 100%);
+  }
+  .cb-detail-hero-content {
+    position: absolute;
+    left: 18px; right: 18px; bottom: 14px;
+    display: flex; flex-direction: column;
+    gap: 7px;
+    z-index: 1;
+  }
+  .cb-detail-hero-row {
+    display: flex; align-items: center; gap: 10px;
+  }
+  .cb-detail-hero-title {
+    font-size: 22px; font-weight: 800;
+    color: #fff;
+    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.7);
+  }
+  .cb-detail-leader-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(196, 181, 253, 0.20);
+    border: 1px solid rgba(196, 181, 253, 0.45);
+    font-size: 11.5px;
+    color: #f5d0fe;
+    font-weight: 700;
+    align-self: flex-start;
+  }
+  .cb-detail-leader-pill strong { color: #fff; font-weight: 800; }
+  .cb-detail-hero-meta {
+    font-size: 11.5px;
+    color: rgba(255, 255, 255, 0.82);
+  }
+
+  /* body — 영역 스크롤. min-height: 0 필수 (flex column 안 flex:1 자식 스크롤). */
+  .cb-detail-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 14px 16px;
+    display: flex; flex-direction: column;
+    gap: 8px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(15, 23, 42, 0.22) transparent;
+  }
+  .cb-detail-empty,
+  .cb-detail-free,
+  .cb-voters-loading,
+  .cb-voters-empty,
+  .cb-voters-error {
+    padding: 16px 12px;
+    text-align: center;
+    font-size: 12.5px;
+    color: var(--cb-text-dim);
+  }
+  .cb-detail-free-main {
+    font-size: 16px;
+    font-weight: 800;
+    color: var(--cb-accent);
+    margin-bottom: 6px;
+  }
+  .cb-voters-error { color: var(--cb-red); }
+
+  /* candidate (accordion) */
+  .cb-detail-cand {
+    background: rgba(15, 23, 42, 0.025);
+    border: 1px solid var(--cb-border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .cb-detail-cand[open] { background: rgba(15, 23, 42, 0.04); }
+  .cb-detail-cand.is-mine {
+    border-color: rgba(14, 116, 144, 0.45);
+    background: rgba(14, 116, 144, 0.06);
+  }
+  .cb-detail-cand.is-mine[open] { background: rgba(14, 116, 144, 0.09); }
+  .cb-detail-cand.is-leading {
+    box-shadow: inset 3px 0 0 var(--cb-accent);
+  }
+  .cb-detail-cand summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 10px 14px;
+    display: flex; flex-direction: column;
+    gap: 7px;
+  }
+  .cb-detail-cand summary::-webkit-details-marker { display: none; }
+  .cb-detail-cand summary::marker { content: ''; }
+
+  .cb-detail-cand-info {
+    display: flex; align-items: center; gap: 8px;
+  }
+  .cb-detail-cand-name {
+    font-weight: 700;
+    color: var(--cb-text);
+    font-size: 14px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    min-width: 0;
+  }
+  .cb-detail-cand-mine {
+    display: inline-flex; align-items: center;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: rgba(14, 116, 144, 0.15);
+    border: 1px solid rgba(14, 116, 144, 0.40);
+    color: var(--cb-info);
+    font-size: 9.5px; font-weight: 800;
+    letter-spacing: 0.04em;
+    flex-shrink: 0;
+  }
+  .cb-detail-cand-spacer { flex: 1; }
+  .cb-detail-cand-count {
+    font-size: 11.5px;
+    color: var(--cb-text-dim);
+    font-variant-numeric: tabular-nums;
+  }
+  .cb-detail-cand-pct {
+    font-size: 14px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    min-width: 42px;
+    text-align: right;
+  }
+  .cb-detail-cand-chevron {
+    width: 14px; height: 14px;
+    color: var(--cb-text-dim);
+    transition: transform 0.18s;
+    flex-shrink: 0;
+  }
+  .cb-detail-cand[open] .cb-detail-cand-chevron { transform: rotate(180deg); }
+
+  .cb-detail-cand-bar {
+    height: 5px;
+    background: rgba(15, 23, 42, 0.08);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .cb-detail-cand-bar > div {
+    height: 100%;
+    background: linear-gradient(90deg, var(--cb-accent), var(--cb-accent-soft));
+    border-radius: 999px;
+  }
+  .cb-detail-cand.is-mine .cb-detail-cand-bar > div {
+    background: linear-gradient(90deg, var(--cb-info), #67e8f9);
+  }
+
+  /* voter chip grid */
+  .cb-voters {
+    display: flex; flex-wrap: wrap;
+    gap: 6px;
+    padding: 4px 14px 12px;
+  }
+  :global(.cb-voters .cb-voter) {
+    display: inline-flex; align-items: center;
+    gap: 6px;
+    padding: 3px 12px 3px 3px;
+    border-radius: 999px;
+    background: var(--cb-surface);
+    border: 1px solid var(--cb-border);
+    font-size: 11.5px;
+  }
+  :global(.cb-voters .cb-voter-avatar) {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: #94a3b8;
+    color: #fff;
+    overflow: hidden;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 800;
+    flex-shrink: 0;
+  }
+  :global(.cb-voters .cb-voter-avatar img) {
+    width: 100%; height: 100%; object-fit: cover;
+  }
+  :global(.cb-voters .cb-voter-name) {
+    font-weight: 600;
+    color: var(--cb-text);
+  }
+  :global(.cb-voters .cb-voter.is-me) {
+    background: rgba(14, 116, 144, 0.10);
+    border-color: rgba(14, 116, 144, 0.40);
+  }
+  :global(.cb-voters .cb-voter.is-me .cb-voter-avatar) { background: var(--cb-info); }
+
+  /* footer */
+  .cb-detail-footer {
+    flex-shrink: 0;
+    padding: 11px 16px;
+    border-top: 1px solid var(--cb-border);
+    display: flex; justify-content: flex-end; gap: 8px;
+    background: var(--cb-surface-2);
+  }
+
+  @media (max-width: 600px) {
+    .cb-detail-dialog {
+      width: 100%;
+      max-width: 100%;
+      max-height: 100vh;
+      border-radius: 0;
+    }
+    .cb-detail-hero { height: 150px; }
+  }
+</style>

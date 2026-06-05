@@ -1,5 +1,6 @@
 ---
-// 거점 방향 컴파스 SVG — center + 4 dot. props.slot 의 위치에 active dot.
+// 거점 방향 컴파스 SVG — 동서남북 4 cardinal 위치 + 캐슬 중앙.
+// 현재 거점 슬롯에 해당하는 dot 만 활성 강조.
 import type { CbTargetSlot } from '@/lib/castle-battle/types';
 import { SLOT_COMPASS } from '@/lib/castle-battle/types';
 
@@ -7,28 +8,31 @@ interface Props {
   slot: CbTargetSlot;
 }
 const { slot } = Astro.props;
-const active = SLOT_COMPASS[slot];
 
-const dots = [
-  { cx: 12, cy: 4 },
-  { cx: 20, cy: 12 },
-  { cx: 12, cy: 20 },
-  { cx: 4, cy: 12 },
+const turretSlots: CbTargetSlot[] = [
+  'turret_north',
+  'turret_east',
+  'turret_south',
+  'turret_west',
 ];
-const isCenter = slot === 'castle';
+const isCastle = slot === 'castle';
 ---
 
 <svg class="cb-compass" viewBox="0 0 24 24" aria-hidden="true">
   <circle class="cb-compass-ring" cx="12" cy="12" r="10.5" />
-  {/* 4 cardinal dots — 항상 표시. 활성 위치는 별도 dot 으로 위에 그려서 강조. */}
-  {dots.map((d) => <circle class="cb-compass-dot" cx={d.cx} cy={d.cy} r="1.8" />)}
-  {/* 활성 dot — 슬롯 위치에 한 개. 캐슬은 중앙(12,12). */}
-  {active && (
-    <circle
-      class="cb-compass-dot is-active"
-      cx={active.cx}
-      cy={active.cy}
-      r={isCenter ? 3.2 : 2.8}
-    />
+  {turretSlots.map((ts) => {
+    const pos = SLOT_COMPASS[ts];
+    const isActive = !isCastle && ts === slot;
+    return (
+      <circle
+        class:list={['cb-compass-dot', { 'is-active': isActive }]}
+        cx={pos.cx}
+        cy={pos.cy}
+        r={isActive ? 2.8 : 1.8}
+      />
+    );
+  })}
+  {isCastle && (
+    <circle class="cb-compass-dot is-active" cx="12" cy="12" r="3.2" />
   )}
 </svg>

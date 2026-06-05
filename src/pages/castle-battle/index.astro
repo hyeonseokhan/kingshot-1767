@@ -15,6 +15,7 @@
 import CastleBattleLayout from '@/layouts/CastleBattleLayout.astro';
 import RoundHero from '@/components/castle-battle/RoundHero.astro';
 import Battlefield from '@/components/castle-battle/Battlefield.astro';
+import TargetDetailDialog from '@/components/castle-battle/TargetDetailDialog.astro';
 import { getActiveRound, getTargetsWithCandidates } from '@/lib/castle-battle/queries';
 import '@/styles/castle-battle.css';
 
@@ -33,6 +34,7 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
     <>
       <RoundHero round={round} roundIndex={round.id} totalVotes={totalVotes} />
       <Battlefield targets={targets} />
+      <TargetDetailDialog targets={targets} />
     </>
   ) : (
     <section class="cb-empty-round">
