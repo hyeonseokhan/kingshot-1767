@@ -1,0 +1,232 @@
+---
+// 모바일 햄버거 드로어 — 좌측 슬라이드 + 어두운 backdrop overlay.
+// 1767 사이트 구조 단순 (2탭 + 서브메뉴 없음) → PNX MobileNav 의 expanding tab 없이
+// 다이렉트 링크로만 구성.
+import { tabs, findActiveTab } from '@/data/navigation';
+
+const activeTab = findActiveTab(Astro.url.pathname);
+---
+
+<div class="mobile-nav-overlay" id="mobile-nav-overlay"></div>
+<aside class="mobile-nav-panel" id="mobile-nav-panel" aria-label="모바일 메뉴">
+  <div class="mobile-nav-close">
+    <span class="mobile-nav-close-label" data-i18n="header.menuOpen">메뉴</span>
+    <button
+      id="mobile-nav-close"
+      type="button"
+      aria-label="메뉴 닫기"
+      data-i18n-attr-aria-label="header.menuClose">&times;</button>
+  </div>
+
+  <nav class="mobile-nav-tabs" aria-label="서비스">
+    {tabs.map((tab) => (
+      <a
+        href={tab.path}
+        class:list={['mobile-nav-tab', { 'is-active': activeTab?.id === tab.id }]}
+        data-i18n={tab.titleKey}
+        aria-current={activeTab?.id === tab.id ? 'page' : undefined}
+      >
+        <span>{tab.title}</span>
+        <span class="mobile-nav-tab-caret" aria-hidden="true">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"></polyline>
+          </svg>
+        </span>
+      </a>
+    ))}
+  </nav>
+
+  <div class="mobile-nav-langs">
+    <label class="mobile-nav-lang-row">
+      <span class="mobile-nav-lang-icon" aria-hidden="true">🌐</span>
+      <span class="mobile-nav-lang-label" data-i18n="langSwitcher.label">언어</span>
+      <span class="mobile-nav-lang-select-wrap">
+        <select class="mobile-nav-lang-select" data-set-lang-select>
+          <option value="ko">한국어</option>
+          <option value="en">English</option>
+        </select>
+        <span class="mobile-nav-lang-caret" aria-hidden="true">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </span>
+      </span>
+    </label>
+  </div>
+</aside>
+
+<script>
+  (function () {
+    const btn = document.getElementById('mobile-menu-btn');
+    const overlay = document.getElementById('mobile-nav-overlay');
+    const panel = document.getElementById('mobile-nav-panel');
+    const closeBtn = document.getElementById('mobile-nav-close');
+
+    function open() {
+      overlay?.classList.add('open');
+      panel?.classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+    function close() {
+      overlay?.classList.remove('open');
+      panel?.classList.remove('open');
+      document.body.style.overflow = '';
+    }
+    btn?.addEventListener('click', open);
+    overlay?.addEventListener('click', close);
+    closeBtn?.addEventListener('click', close);
+    // ESC 로 닫기
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && panel?.classList.contains('open')) close();
+    });
+  })();
+</script>
+
+<style>
+  .mobile-nav-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    background: rgba(15, 23, 42, 0.50);
+    backdrop-filter: blur(2px);
+  }
+  .mobile-nav-overlay.open { display: block; }
+
+  .mobile-nav-panel {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 280px;
+    max-width: 80vw;
+    background: var(--brand-surface);
+    color: var(--brand-text);
+    z-index: 201;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    overflow-y: auto;
+    box-shadow: 4px 0 24px rgba(15, 23, 42, 0.18);
+  }
+  .mobile-nav-panel.open { transform: translateX(0); }
+
+  .mobile-nav-close {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: var(--header-h);
+    padding: 0 18px;
+    border-bottom: 1px solid var(--brand-border);
+    flex-shrink: 0;
+  }
+  .mobile-nav-close-label {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--brand-text-dim);
+  }
+  .mobile-nav-close button {
+    background: none;
+    border: none;
+    font-size: 22px;
+    color: var(--brand-text-dim);
+    cursor: pointer;
+    padding: 4px 8px;
+    transition: color 0.15s;
+  }
+  .mobile-nav-close button:hover { color: var(--brand-text); }
+
+  .mobile-nav-tabs {
+    padding: 8px 0;
+  }
+  .mobile-nav-tab {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--brand-text);
+    text-decoration: none;
+    border-left: 3px solid transparent;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+  }
+  .mobile-nav-tab:hover {
+    background: rgba(15, 23, 42, 0.04);
+    text-decoration: none;
+  }
+  .mobile-nav-tab.is-active {
+    background: rgba(124, 58, 237, 0.10);
+    border-left-color: var(--brand-accent);
+    color: var(--brand-accent);
+  }
+  .mobile-nav-tab-caret {
+    color: var(--brand-text-dim);
+    opacity: 0.6;
+  }
+
+  /* === 언어 선택 (메뉴 하단) === */
+  .mobile-nav-langs {
+    margin-top: 12px;
+    padding: 12px 0;
+    border-top: 1px solid var(--brand-border);
+  }
+  .mobile-nav-langs::before {
+    content: 'SETTING';
+    display: block;
+    padding: 0 18px 8px;
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--brand-text-faint);
+  }
+  .mobile-nav-lang-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 18px;
+    color: var(--brand-text);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .mobile-nav-lang-icon { font-size: 15px; line-height: 1; }
+  .mobile-nav-lang-label { flex: 1; }
+  .mobile-nav-lang-select-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+  }
+  .mobile-nav-lang-select {
+    appearance: none;
+    -webkit-appearance: none;
+    background: rgba(15, 23, 42, 0.04);
+    border: 1px solid var(--brand-border);
+    color: var(--brand-text);
+    font-family: var(--font);
+    font-size: 13px;
+    font-weight: 500;
+    padding: 6px 26px 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    line-height: 1.4;
+    transition: background 0.15s;
+  }
+  .mobile-nav-lang-select:hover,
+  .mobile-nav-lang-select:focus {
+    background: rgba(124, 58, 237, 0.10);
+    border-color: rgba(124, 58, 237, 0.30);
+    outline: none;
+  }
+  .mobile-nav-lang-caret {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--brand-text-dim);
+    pointer-events: none;
+    display: inline-flex;
+  }
+</style>

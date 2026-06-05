@@ -22,7 +22,8 @@ export const ko = {
   },
   header: {
     title: '1767 서버',
-    // PNX 잔여 키 (1767 에선 미사용)
+    auth: '계정 인증',
+    authed: '인증됨',
     menuOpen: '메뉴',
     menuClose: '메뉴 닫기',
     support: '☕️ 후원하기',

@@ -1,0 +1,58 @@
+---
+// 헤더의 "계정 인증" 버튼 — 모든 페이지 공통.
+// 클릭 시 'app-open-auth' CustomEvent 를 document 에 dispatch.
+// 각 페이지가 이 이벤트를 listen 해 자체 인증 다이얼로그 (KvK: sk-auth-dialog,
+// Castle: 추후 별도) 를 열게 한다.
+//
+// 인증 상태 sync 는 후속 — 현재는 stateless visual 버튼.
+---
+
+<button class="auth-btn" id="app-auth-btn" type="button" data-i18n-attr-title="header.auth" title="계정 인증">
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+  </svg>
+  <span class="auth-btn-label" data-i18n="header.auth">계정 인증</span>
+</button>
+
+<script>
+  (function () {
+    const btn = document.getElementById('app-auth-btn');
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+      // 각 페이지가 listen — KvK 는 sk-auth-dialog 를 열고, Castle 은 후속.
+      document.dispatchEvent(new CustomEvent('app-open-auth'));
+    });
+  })();
+</script>
+
+<style>
+  .auth-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 10px;
+    border-radius: 6px;
+    background: rgba(124, 58, 237, 0.10);
+    border: 1px solid rgba(124, 58, 237, 0.35);
+    color: var(--brand-accent);
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+    flex-shrink: 0;
+  }
+  .auth-btn:hover {
+    background: rgba(124, 58, 237, 0.16);
+    border-color: rgba(124, 58, 237, 0.50);
+  }
+  .auth-btn svg {
+    flex-shrink: 0;
+  }
+  /* 모바일에선 라벨 숨김, 아이콘만 */
+  @media (max-width: 600px) {
+    .auth-btn { padding: 5px 8px; }
+    .auth-btn-label { display: none; }
+  }
+</style>

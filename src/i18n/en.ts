@@ -21,7 +21,8 @@ export const en: Translations = {
   },
   header: {
     title: '1767 Server',
-    // PNX legacy keys (unused in 1767)
+    auth: 'Sign in',
+    authed: 'Signed in',
     menuOpen: 'Menu',
     menuClose: 'Close menu',
     support: '☕️ Support',

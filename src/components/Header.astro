@@ -1,8 +1,10 @@
 ---
 // 통합 상단 헤더 — KvK 설문 / 캐슬 전투 두 서비스를 탭으로 전환.
-// BaseLayout 에서 사용. 서비스별 layout(SurveyLayout/CastleBattleLayout) 은 Header 를 직접 import 하지 않고
-// BaseLayout 을 감싸 사용한다.
+// 우측 actions: [페이지별 actions (header-actions slot)] + [계정 인증] + [언어 선택]
+// 모바일: nav 숨김 + 햄버거 버튼으로 MobileNav 드로어 토글.
 import LangSwitcher from '@/components/LangSwitcher.astro';
+import AuthButton from '@/components/AuthButton.astro';
+import MobileNav from '@/components/MobileNav.astro';
 import { tabs, findActiveTab } from '@/data/navigation';
 
 const activeTab = findActiveTab(Astro.url.pathname);
@@ -10,6 +12,20 @@ const activeTab = findActiveTab(Astro.url.pathname);
 
 <header class="app-header">
   <div class="app-header-inner">
+    <button
+      class="mobile-menu-btn"
+      id="mobile-menu-btn"
+      type="button"
+      aria-label="메뉴"
+      data-i18n-attr-aria-label="header.menuOpen"
+    >
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <line x1="3" y1="6" x2="21" y2="6"></line>
+        <line x1="3" y1="12" x2="21" y2="12"></line>
+        <line x1="3" y1="18" x2="21" y2="18"></line>
+      </svg>
+    </button>
+
     <a class="app-brand" href="/" aria-label="1767 서버 — 홈으로">
       <img src="/logo.png" alt="PNX" width="28" height="28" decoding="async" />
       <span class="app-brand-text" data-i18n="header.title">1767 서버</span>
@@ -30,10 +46,13 @@ const activeTab = findActiveTab(Astro.url.pathname);
 
     <div class="app-header-actions">
       <slot name="header-actions" />
+      <AuthButton />
       <LangSwitcher />
     </div>
   </div>
 </header>
+
+<MobileNav />
 
 <style>
   .app-header {
@@ -54,7 +73,7 @@ const activeTab = findActiveTab(Astro.url.pathname);
     padding: 0 16px;
     display: flex;
     align-items: center;
-    gap: 24px;
+    gap: 16px;
   }
   .app-brand {
     display: inline-flex;
@@ -83,11 +102,7 @@ const activeTab = findActiveTab(Astro.url.pathname);
     gap: 4px;
     flex: 1;
     min-width: 0;
-    overflow-x: auto;
-    scrollbar-width: none;
   }
-  .app-nav::-webkit-scrollbar { display: none; }
-
   .app-nav-tab {
     display: inline-flex;
     align-items: center;
@@ -115,19 +130,37 @@ const activeTab = findActiveTab(Astro.url.pathname);
     align-items: center;
     gap: 6px;
     flex-shrink: 0;
+    margin-left: auto;
   }
 
-  @media (max-width: 600px) {
+  /* === 햄버거 버튼 === */
+  .mobile-menu-btn {
+    display: none;
+    background: none;
+    border: none;
+    padding: 6px;
+    margin-left: -6px;
+    cursor: pointer;
+    color: var(--brand-text);
+    border-radius: 6px;
+    transition: background 0.15s;
+  }
+  .mobile-menu-btn:hover { background: rgba(15, 23, 42, 0.05); }
+
+  /* === 모바일: 탭 숨김 + 햄버거 노출 === */
+  @media (max-width: 768px) {
     .app-header-inner {
-      gap: 12px;
-      padding: 0 10px;
+      gap: 10px;
+      padding: 0 12px;
     }
-    .app-brand {
+    .mobile-menu-btn { display: inline-flex; align-items: center; justify-content: center; }
+    .app-nav { display: none; }
+    /* nav 사라지면 app-brand 와 actions 사이 공간을 actions 의 margin-left:auto 가 흡수 */
+  }
+  @media (max-width: 600px) {
+    .app-brand-text {
       font-size: 13px;
     }
-    .app-nav-tab {
-      padding: 5px 10px;
-      font-size: 12.5px;
-    }
+    .app-brand img { width: 24px; height: 24px; }
   }
 </style>

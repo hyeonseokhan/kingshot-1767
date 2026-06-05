@@ -150,5 +150,8 @@
     font-weight: 700;
   }
 
-  /* 1767 사이트는 MobileNav 가 없음 — 모바일에서도 헤더에 LangSwitcher 노출. */
+  /* 모바일: 헤더에서 숨김 — MobileNav 드로어 안의 언어 picker 가 대체. */
+  @media (max-width: 768px) {
+    .lang-switcher { display: none; }
+  }
 </style>
