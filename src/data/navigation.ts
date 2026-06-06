@@ -15,13 +15,15 @@ export type NavTab = {
 };
 
 export const tabs: NavTab[] = [
-  {
-    id: 'kvk',
-    title: ko.nav.kvk,
-    titleKey: 'nav.kvk',
-    path: '/survey/',
-    pathPrefix: '/survey/',
-  },
+  // KvK 설문 — 시즌 운영 중단으로 상단 메뉴 숨김. 페이지(/survey/) 자체는 살아있음.
+  // 재오픈 시 아래 주석 해제.
+  // {
+  //   id: 'kvk',
+  //   title: ko.nav.kvk,
+  //   titleKey: 'nav.kvk',
+  //   path: '/survey/',
+  //   pathPrefix: '/survey/',
+  // },
   {
     id: 'castle',
     title: ko.nav.castle,
