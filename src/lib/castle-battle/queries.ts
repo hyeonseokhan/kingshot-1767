@@ -189,32 +189,44 @@ export async function getVoters(
 
 // ─── 내부 헬퍼 ─────────────────────────────────────────────
 
-/** members 테이블에서 profile_photo 일괄 lookup. */
+/**
+ * profile_photo 일괄 lookup — cb_ralliers + members 합쳐 조회.
+ *
+ * 우선순위: cb_ralliers > members.
+ *   - cb_ralliers: 캐슬 전투 후보 등록 시 게임 공식 API 응답을 upsert (최신 avatar 보장).
+ *   - members: PNX 연맹원만 등록되어 있어 1767 일반 사용자는 X.
+ * 둘 다 NULL 이면 결과 Map 에서 NULL 반환 → 컴포넌트가 이니셜 fallback.
+ */
 async function fetchProfilePhotos(kingshotIds: string[]): Promise<Map<string, string | null>> {
   if (kingshotIds.length === 0) return new Map();
-  const { data } = await supabase
-    .from('members')
-    .select('kingshot_id, profile_photo')
-    .in('kingshot_id', kingshotIds);
-  return new Map(
-    ((data ?? []) as Array<{ kingshot_id: string; profile_photo: string | null }>).map((r) => [
-      r.kingshot_id,
-      r.profile_photo,
-    ]),
-  );
+  const [{ data: ralliers }, { data: members }] = await Promise.all([
+    supabase.from('cb_ralliers').select('kingshot_id, profile_photo').in('kingshot_id', kingshotIds),
+    supabase.from('members').select('kingshot_id, profile_photo').in('kingshot_id', kingshotIds),
+  ]);
+  const map = new Map<string, string | null>();
+  // members 먼저 채우고 cb_ralliers 가 덮어쓰기 (rallier 우선).
+  ((members ?? []) as Array<{ kingshot_id: string; profile_photo: string | null }>).forEach((r) => {
+    map.set(r.kingshot_id, r.profile_photo);
+  });
+  ((ralliers ?? []) as Array<{ kingshot_id: string; profile_photo: string | null }>).forEach((r) => {
+    if (r.profile_photo) map.set(r.kingshot_id, r.profile_photo);
+  });
+  return map;
 }
 
-/** members 테이블에서 nickname 일괄 lookup. */
+/** nickname 일괄 lookup — cb_ralliers + members. 우선순위 동일 (rallier 가 최신). */
 async function fetchNicknames(kingshotIds: string[]): Promise<Map<string, string>> {
   if (kingshotIds.length === 0) return new Map();
-  const { data } = await supabase
-    .from('members')
-    .select('kingshot_id, nickname')
-    .in('kingshot_id', kingshotIds);
-  return new Map(
-    ((data ?? []) as Array<{ kingshot_id: string; nickname: string }>).map((r) => [
-      r.kingshot_id,
-      r.nickname,
-    ]),
-  );
+  const [{ data: ralliers }, { data: members }] = await Promise.all([
+    supabase.from('cb_ralliers').select('kingshot_id, nickname').in('kingshot_id', kingshotIds),
+    supabase.from('members').select('kingshot_id, nickname').in('kingshot_id', kingshotIds),
+  ]);
+  const map = new Map<string, string>();
+  ((members ?? []) as Array<{ kingshot_id: string; nickname: string }>).forEach((r) => {
+    map.set(r.kingshot_id, r.nickname);
+  });
+  ((ralliers ?? []) as Array<{ kingshot_id: string; nickname: string }>).forEach((r) => {
+    if (r.nickname) map.set(r.kingshot_id, r.nickname);
+  });
+  return map;
 }
