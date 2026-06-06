@@ -144,9 +144,8 @@
 
   /* ── 영웅 영역 ─────────────────────────── */
   .cb-hero {
-    max-width: 1400px;
-    margin: 24px auto 0;
-    padding: 0 16px;
+    width: 100%;
+    margin: 24px 0 0;
     text-align: center;
   }
   .cb-hero-eyebrow {
@@ -188,10 +187,10 @@
   }
 
   /* ── 전장 그리드 (5 컬럼, 캐슬 강조) ─────────────────── */
+  /* castle-main 이 외부 좌우 패딩을 담당하므로 여기는 패딩 X. */
   .cb-battlefield {
-    max-width: 1400px;
-    margin: 28px auto 40px;
-    padding: 0 16px;
+    width: 100%;
+    margin: 28px 0 40px;
     display: grid;
     /* 캐슬을 1.4배 넓혀 시각적 위계 부여 */
     grid-template-columns: 1fr 1fr 1.4fr 1fr 1fr;
@@ -278,9 +277,10 @@
     gap: 6px; z-index: 2;
   }
   .cb-target-label-main {
-    display: flex; flex-direction: column;
-    align-items: flex-start;
-    gap: 5px;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
     min-width: 0;
   }
 
@@ -420,74 +420,107 @@
   .cb-cands::-webkit-scrollbar-thumb:hover { background: rgba(15, 23, 42, 0.32); }
 
   .cb-cand {
-    display: grid;
-    grid-template-columns: auto 1fr auto;
-    grid-template-rows: auto auto;
-    column-gap: 6px;
-    row-gap: 3px;
-    align-items: center;
-    padding: 6px 8px;
+    /* 2 줄 — 위: 닉네임. 아래: 연맹 + 표·% 메타. 사이에 hairline 구분선. */
+    display: flex;
+    flex-direction: column;
+    padding: 7px 10px;
     border-radius: 6px;
     background: rgba(15, 23, 42, 0.03);
     border: 1px solid transparent;
     transition: background 0.12s, border-color 0.12s;
   }
+  .cb-cand-line1 {
+    min-width: 0;
+    padding-bottom: 5px;
+    border-bottom: 1px solid rgba(15, 23, 42, 0.08);  /* hairline */
+    margin-bottom: 5px;
+  }
+  .cb-cand-line2 {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--cb-text-dim);
+    letter-spacing: 0.01em;
+  }
+  .cb-cand-stats {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 5px;
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+  }
+  .cb-cand-count {
+    color: var(--cb-text-dim);
+  }
+  /* hover/내표 상태에서는 hairline 도 살짝 진하게 — 가독성 유지. */
+  .cb-cand:hover .cb-cand-line1 { border-bottom-color: rgba(15, 23, 42, 0.12); }
+  .cb-cand.is-voted .cb-cand-line1 { border-bottom-color: rgba(14, 116, 144, 0.30); }
   .cb-cand:hover {
     background: rgba(15, 23, 42, 0.06);
     border-color: rgba(15, 23, 42, 0.08);
   }
   .cb-cand.is-voted {
-    background: rgba(14, 116, 144, 0.08);
-    border-color: rgba(14, 116, 144, 0.32);
+    background: rgba(14, 116, 144, 0.06);
+    border-color: rgba(14, 116, 144, 0.24);
   }
-  .cb-cand.is-leading {
-    background: rgba(124, 58, 237,0.10);
-    border-color: rgba(124, 58, 237,0.32);
+  /* 1 위 별도 강조 없음 — 다른 후보와 동일. 거점 이미지 위 LeaderPortrait 에서 이미 1 위 표시됨. */
+  .cb-cand-avatar {
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    overflow: hidden;
+    flex-shrink: 0;
+    background: linear-gradient(135deg, var(--cb-accent-bright, #a78bfa), var(--cb-accent, #7c3aed));
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 800;
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.6);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
   }
+  .cb-cand-avatar-img {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .cb-cand-avatar-initial { line-height: 1; }
   .cb-cand-tag {
+    /* 인라인 chip — 닉네임 앞에 작게. */
     font-size: 9px;
     font-weight: 800;
     color: var(--cb-accent);
-    background: rgba(124, 58, 237,0.12);
-    border: 1px solid rgba(124, 58, 237,0.22);
+    background: rgba(124, 58, 237, 0.12);
+    border: 1px solid rgba(124, 58, 237, 0.22);
     padding: 1px 5px;
     border-radius: 3px;
     letter-spacing: 0.06em;
-    grid-row: 1;
+    flex-shrink: 0;
+  }
+  /* 메인 카드 후보 행 두 번째 줄 안에서는 chip 스타일 풀고 메타 텍스트 톤으로. */
+  .cb-cand-line2 .cb-cand-tag {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--cb-text-dim);
+    font-weight: 700;
+    font-size: 11px;
+    letter-spacing: 0.04em;
   }
   .cb-cand-name {
-    font-size: 12px;
+    display: block;
+    font-size: 13px;
     font-weight: 700;
     color: var(--cb-text);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    grid-row: 1;
   }
   .cb-cand-pct {
     font-size: 11px;
     font-weight: 700;
     color: var(--cb-text);
     font-variant-numeric: tabular-nums;
-    grid-row: 1;
-  }
-  .cb-cand-bar {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    height: 3px;
-    border-radius: 999px;
-    background: rgba(15, 23, 42, 0.10);
-    overflow: hidden;
-  }
-  .cb-cand-bar > div {
-    height: 100%;
-    background: linear-gradient(90deg, var(--cb-accent), var(--cb-accent-soft));
-    border-radius: 999px;
-    transition: width 0.3s;
-  }
-  .cb-cand.is-voted .cb-cand-bar > div {
-    background: linear-gradient(90deg, var(--cb-info), #67e8f9);
-  }
-  .cb-cand.is-leading:not(.is-voted) .cb-cand-bar > div {
-    box-shadow: 0 0 8px rgba(124, 58, 237,0.45);
   }
 
   /* === 자유전투 카드 === */

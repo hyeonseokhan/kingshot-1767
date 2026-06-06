@@ -21,12 +21,13 @@ const {
 </BaseLayout>
 
 <style is:global>
-  /* castle-main — 5컬럼 카드 그리드에 맞춰 넓게. */
+  /* castle-main — 5컬럼 카드 그리드에 맞춰 최대한 넓게.
+     좌우 패딩 최소화 (24px 고정). 4K 등 초대형 화면 안전망 max-width 1800. */
   .castle-main {
-    max-width: 1400px;
+    max-width: 1800px;
     width: 100%;
     margin: 0 auto;
-    padding: 16px;
+    padding: 16px 24px;
   }
   @media (max-width: 600px) {
     .castle-main { padding: 10px; }
