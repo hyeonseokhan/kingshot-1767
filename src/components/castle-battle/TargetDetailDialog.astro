@@ -82,6 +82,13 @@ const { targets, roundId, roundStatus } = Astro.props;
               >
                 <summary>
                   <div class="cb-detail-cand-info">
+                    <span class="cb-cand-avatar cb-detail-cand-avatar">
+                      {c.profile_photo ? (
+                        <img class="cb-cand-avatar-img" src={c.profile_photo} alt="" />
+                      ) : (
+                        <span class="cb-cand-avatar-initial">{(c.rallier_nickname || '?').charAt(0).toUpperCase()}</span>
+                      )}
+                    </span>
                     <span class="cb-cand-tag">{c.alliance_tag}</span>
                     <span class="cb-detail-cand-name">{c.rallier_nickname}</span>
                     {c.is_mine && <span class="cb-detail-cand-mine">✓ 내 표</span>}
@@ -100,7 +107,6 @@ const { targets, roundId, roundStatus } = Astro.props;
                             fill="none" stroke-linecap="round" stroke-linejoin="round" />
                     </svg>
                   </div>
-                  <div class="cb-detail-cand-bar"><div style={`width:${c.vote_pct}%`}></div></div>
                 </summary>
                 <div class="cb-voters" data-candidate-id={c.candidate_id} data-loaded="false">
                   <div class="cb-voters-loading">투표자 불러오는 중…</div>
@@ -485,7 +491,15 @@ const { targets, roundId, roundStatus } = Astro.props;
   .cb-detail-cand summary::marker { content: ''; }
 
   .cb-detail-cand-info {
-    display: flex; align-items: center; gap: 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  /* 다이얼로그는 공간 충분 — 아바타 살짝 크게. */
+  .cb-detail-cand-avatar {
+    width: 32px !important;
+    height: 32px !important;
+    font-size: 12px !important;
   }
   .cb-detail-cand-name {
     font-weight: 700;

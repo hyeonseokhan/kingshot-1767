@@ -141,7 +141,7 @@ export async function getTargetsWithCandidates(
         is_mine: myCandIds.has(c.id),
       };
     });
-    // leader: vote_count desc, tie-break by display_order asc (already sorted)
+    // vote_count desc 로 정렬 — 표 많은 후보가 위로. 동률 시 원래 display_order 유지 (sort 가 stable).
     const sortedByVotes = [...cvs].sort((a, b) => b.vote_count - a.vote_count);
     const leader = t.is_open && sortedByVotes.length > 0 ? sortedByVotes[0] : null;
     const my_vote = cvs.find((c) => c.is_mine) ?? null;
@@ -149,7 +149,7 @@ export async function getTargetsWithCandidates(
       target_id: t.id,
       slot: t.slot,
       is_open: t.is_open,
-      candidates: cvs,
+      candidates: sortedByVotes,
       total_votes: total,
       leader,
       my_vote,

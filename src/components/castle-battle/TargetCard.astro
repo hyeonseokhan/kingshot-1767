@@ -37,13 +37,13 @@ const slotLabel = SLOT_LABEL[target.slot];
         <Compass slot={target.slot} />
         <span class="cb-target-name">{slotLabel}</span>
       </div>
+      {/* 회차 status 태그(진행 중/마감/결과/준비 중) 는 상단 영웅 영역과 중복 → 제거.
+          자유전투/미등록은 거점 고유 속성 / ✓ 투표함은 사용자 개인 상태 → 유지. */}
       {isFree ? (
         <span class="cb-target-tag tag-free">{isEmpty ? '미등록' : '자유전투'}</span>
       ) : isVoted ? (
         <span class="cb-target-tag tag-voted">✓ 투표함</span>
-      ) : (
-        <span class="cb-target-tag">진행 중</span>
-      )}
+      ) : null}
     </div>
   </div>
 
@@ -92,11 +92,16 @@ const slotLabel = SLOT_LABEL[target.slot];
                 },
               ]}
             >
-              <span class="cb-cand-tag">{cand.alliance_tag}</span>
-              <span class="cb-cand-name">{cand.rallier_nickname}</span>
-              <span class="cb-cand-pct">{cand.vote_pct}%</span>
-              <div class="cb-cand-bar">
-                <div style={`width:${cand.vote_pct}%`}></div>
+              {/* 2 줄 — 위: 닉네임 (큰 폰트). 아래: 연맹 + 표·% (작은 회색 메타). 좁은 카드에서 닉이 잘리지 않도록. */}
+              <div class="cb-cand-line1">
+                <span class="cb-cand-name">{cand.rallier_nickname}</span>
+              </div>
+              <div class="cb-cand-line2">
+                <span class="cb-cand-tag">{cand.alliance_tag}</span>
+                <span class="cb-cand-stats">
+                  <span class="cb-cand-count">{cand.vote_count}표</span>
+                  <span class="cb-cand-pct">{cand.vote_pct}%</span>
+                </span>
               </div>
             </div>
           ))

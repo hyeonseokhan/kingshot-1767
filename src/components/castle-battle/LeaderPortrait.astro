@@ -22,12 +22,7 @@ const initial = (candidate.rallier_nickname || '?').charAt(0);
     <div class="cb-leader-portrait-img">{initial}</div>
   )}
   <div class="cb-leader-portrait-info">
+    {/* 메인 카드 — 포트레이트엔 닉네임만. 연맹/표/% 등 상세는 후보 목록 + 상세 다이얼로그에서. */}
     <div class="cb-leader-portrait-name">{candidate.rallier_nickname}</div>
-    <div class="cb-leader-portrait-stats">
-      <span class="cb-leader-portrait-tag">{candidate.alliance_tag}</span>
-      <span class="cb-leader-portrait-votes">
-        {candidate.vote_count}표 · {candidate.vote_pct}%
-      </span>
-    </div>
   </div>
 </div>
