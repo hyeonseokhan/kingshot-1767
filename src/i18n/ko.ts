@@ -55,16 +55,12 @@ export const ko = {
     },
   },
   footer: {
-    tagline: '킹샷 1767 서버 전용 도구 — KvK 설문과 캐슬 전투 예측 투표를 한 곳에서.',
+    tagline: '킹샷 1767 서버 전용 도구 — 캐슬 전투 예측 투표.',
     copy: '© 2026 PNX Toycode. All rights reserved.',
   },
   home: {
     title: '1767 서버 허브',
-    subtitle: '서버 전용 도구 모음 — KvK 설문과 캐슬 전투 투표를 한 곳에서.',
-    kvk: {
-      title: 'KvK 설문',
-      description: '가속권 보유 현황 조사 + 버프 예약',
-    },
+    subtitle: '서버 전용 도구 모음 — 캐슬 전투 예측 투표.',
     castle: {
       title: '캐슬 전투',
       description: '회차별 거점 점령 집결자 예측 투표',

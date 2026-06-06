@@ -54,16 +54,12 @@ export const en: Translations = {
     },
   },
   footer: {
-    tagline: 'Kingshot 1767 server tools — KvK Survey and Castle Battle voting in one place.',
+    tagline: 'Kingshot 1767 server tools — Castle Battle voting.',
     copy: '© 2026 PNX Toycode. All rights reserved.',
   },
   home: {
     title: '1767 Server Hub',
-    subtitle: 'Server-only tools — KvK Survey & Castle Battle voting in one place.',
-    kvk: {
-      title: 'KvK Survey',
-      description: 'Speed-up inventory survey + buff scheduling',
-    },
+    subtitle: 'Server-only tools — Castle Battle voting.',
     castle: {
       title: 'Castle Battle',
       description: 'Vote on which rallier will hold each target per round',

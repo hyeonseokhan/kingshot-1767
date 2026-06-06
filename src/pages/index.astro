@@ -1,31 +1,22 @@
 ---
 // 1767 서버 허브 — 홈 페이지 (서비스 카탈로그).
-// 두 서비스 (KvK 설문 / 캐슬 전투 투표) 카드 2개로 노출.
+// KvK 설문은 시즌 운영 중단으로 허브 카드/상단 메뉴에서 모두 제거. 페이지 자체는 직접 URL 로 접근 가능.
 import BaseLayout from '@/layouts/BaseLayout.astro';
 ---
 
 <BaseLayout
   title="1767 Server Hub"
-  description="1767 서버 전용 도구 모음 — KvK 설문 + 캐슬 전투 투표"
+  description="1767 서버 전용 도구 모음 — 캐슬 전투 투표"
   mainClass="home-main"
 >
   <section class="home-hero">
     <h1 class="home-title" data-i18n="home.title">1767 서버 허브</h1>
     <p class="home-subtitle" data-i18n="home.subtitle">
-      서버 전용 도구 모음 — KvK 설문과 캐슬 전투 투표를 한 곳에서.
+      서버 전용 도구 모음 — 캐슬 전투 예측 투표.
     </p>
   </section>
 
   <section class="home-services">
-    <a class="home-service-card" href="/survey/">
-      <div class="home-service-icon">📋</div>
-      <h2 class="home-service-title" data-i18n="home.kvk.title">KvK 설문</h2>
-      <p class="home-service-desc" data-i18n="home.kvk.description">
-        가속권 보유 현황 조사 + 버프 예약
-      </p>
-      <span class="home-service-cta" data-i18n="home.open">들어가기 →</span>
-    </a>
-
     <a class="home-service-card" href="/castle-battle/">
       <div class="home-service-icon">🏰</div>
       <h2 class="home-service-title" data-i18n="home.castle.title">캐슬 전투</h2>
