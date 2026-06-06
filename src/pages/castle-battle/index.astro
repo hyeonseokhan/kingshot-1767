@@ -403,12 +403,12 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
           </div>
           <div class="cb-nr-form-preview" hidden>
             <div class="cb-nr-preview-row">
-              <div class="cb-nr-badge">
-                <span class="cb-nr-badge-avatar">
-                  <img class="cb-nr-badge-img" alt="" hidden />
-                  <span class="cb-nr-badge-initial"></span>
+              <div class="cb-nr-preview-badge">
+                <span class="cb-nr-preview-avatar">
+                  <img class="cb-nr-preview-img" alt="" hidden />
+                  <span class="cb-nr-preview-initial"></span>
                 </span>
-                <span class="cb-nr-badge-nick"></span>
+                <span class="cb-nr-preview-nick"></span>
               </div>
               <button class="cb-nr-add-btn" type="button">후보 등록</button>
             </div>
@@ -426,14 +426,27 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
     const ksidInput = card.querySelector('.cb-nr-f-ksid') as HTMLInputElement;
     const lookupBtn = card.querySelector('.cb-nr-lookup-btn') as HTMLButtonElement;
     const previewEl = card.querySelector('.cb-nr-form-preview') as HTMLElement;
-    const badgeImg = card.querySelector('.cb-nr-badge-img') as HTMLImageElement;
-    const badgeInitial = card.querySelector('.cb-nr-badge-initial') as HTMLElement;
-    const badgeNick = card.querySelector('.cb-nr-badge-nick') as HTMLElement;
+    // 미리보기 셀렉터: card.querySelector 가 동일 클래스(`.cb-nr-badge-*`)의 첫 매칭을
+    // 등록된 후보 목록에서 잡아 1번 후보의 닉네임을 덮어쓰던 회귀 → preview-* 로 격리.
+    const badgeImg = card.querySelector('.cb-nr-preview-img') as HTMLImageElement;
+    const badgeInitial = card.querySelector('.cb-nr-preview-initial') as HTMLElement;
+    const badgeNick = card.querySelector('.cb-nr-preview-nick') as HTMLElement;
     const lookupErr = card.querySelector('.cb-nr-lookup-err') as HTMLElement;
     const addBtn = card.querySelector('.cb-nr-add-btn') as HTMLButtonElement;
     const badgeList = card.querySelector('.cb-nr-badge-list') as HTMLElement;
 
-    let fetched: { nickname: string; profile_photo: string } | null = null;
+    // fetched.ksid 는 조회 성공한 시점의 ID 스냅샷 — 등록 시 ksidInput.value 와 비교해서
+    // 사용자가 ID 만 바꾸고 재조회 안 한 케이스(stale fetched) 차단.
+    let fetched: { ksid: string; nickname: string; profile_photo: string } | null = null;
+
+    // ksid 인풋이 바뀌면 이전 조회 결과 무효화 — stale fetched 로 잘못된 사용자 등록 방지.
+    ksidInput.addEventListener('input', () => {
+      if (fetched && ksidInput.value.trim() !== fetched.ksid) {
+        fetched = null;
+        previewEl.hidden = true;
+        lookupBtn.textContent = '조회';
+      }
+    });
 
     // ─ 조회 ─
     lookupBtn.addEventListener('click', async () => {
@@ -448,7 +461,7 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
       try {
         const res = await callFn({ action: 'lookup-player', kingshot_id: ksid });
         if (res.ok) {
-          fetched = { nickname: res.nickname ?? '', profile_photo: res.profile_photo ?? '' };
+          fetched = { ksid, nickname: res.nickname ?? '', profile_photo: res.profile_photo ?? '' };
           if (fetched.profile_photo) {
             badgeImg.src = fetched.profile_photo;
             badgeImg.hidden = false;
@@ -456,7 +469,7 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
           } else {
             badgeImg.hidden = true;
             badgeInitial.textContent = (fetched.nickname.charAt(0) || '?').toUpperCase();
-            (badgeInitial as HTMLElement).hidden = false;
+            badgeInitial.hidden = false;
           }
           badgeNick.textContent = fetched.nickname;
           previewEl.hidden = false;
@@ -479,6 +492,17 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
       if (!fetched) return;
 
       const ksid = ksidInput.value.trim();
+      // ksid 인풋과 fetched.ksid 가 다르면 stale — 재조회 유도.
+      if (ksid !== fetched.ksid) {
+        lookupErr.textContent = '킹샷 ID 가 변경되었습니다 — 재조회해주세요';
+        return;
+      }
+      // 같은 거점 같은 사용자 중복 차단 (kingshot_id 기반). DB 부분 unique 와 이중 방어.
+      if (badgeList.querySelector(`.cb-nr-cand-badge[data-ksid="${ksid}"]`)) {
+        lookupErr.textContent = '이 거점에 이미 등록된 사용자입니다';
+        return;
+      }
+
       const photoSrc = fetched.profile_photo;
       const nick = fetched.nickname;
 
@@ -508,6 +532,7 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
       fetched = null;
       previewEl.hidden = true;
       lookupBtn.textContent = '조회';
+      lookupErr.textContent = '';
       tagInput.focus();
     });
 
@@ -615,12 +640,12 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
           </div>
           <div class="cb-nr-form-preview" hidden>
             <div class="cb-nr-preview-row">
-              <div class="cb-nr-badge">
-                <span class="cb-nr-badge-avatar">
-                  <img class="cb-nr-badge-img" alt="" hidden />
-                  <span class="cb-nr-badge-initial"></span>
+              <div class="cb-nr-preview-badge">
+                <span class="cb-nr-preview-avatar">
+                  <img class="cb-nr-preview-img" alt="" hidden />
+                  <span class="cb-nr-preview-initial"></span>
                 </span>
-                <span class="cb-nr-badge-nick"></span>
+                <span class="cb-nr-preview-nick"></span>
               </div>
               <button class="cb-nr-add-btn" type="button">후보 등록</button>
             </div>
@@ -644,13 +669,25 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
     const ksidInput = card.querySelector('.cb-nr-f-ksid') as HTMLInputElement;
     const lookupBtn = card.querySelector('.cb-nr-lookup-btn') as HTMLButtonElement;
     const previewEl = card.querySelector('.cb-nr-form-preview') as HTMLElement;
-    const badgeImg = card.querySelector('.cb-nr-badge-img') as HTMLImageElement;
-    const badgeInitial = card.querySelector('.cb-nr-badge-initial') as HTMLElement;
-    const badgeNick = card.querySelector('.cb-nr-badge-nick') as HTMLElement;
+    // 미리보기 셀렉터: card.querySelector 가 등록된 후보(.cb-nr-badge-*) 의 첫 매칭을 잡아
+    // 다음 조회 결과로 1번 후보의 닉네임을 덮어쓰던 회귀 → preview-* 로 격리.
+    const badgeImg = card.querySelector('.cb-nr-preview-img') as HTMLImageElement;
+    const badgeInitial = card.querySelector('.cb-nr-preview-initial') as HTMLElement;
+    const badgeNick = card.querySelector('.cb-nr-preview-nick') as HTMLElement;
     const lookupErr = card.querySelector('.cb-nr-lookup-err') as HTMLElement;
     const addBtn = card.querySelector('.cb-nr-add-btn') as HTMLButtonElement;
 
-    let fetched: { nickname: string; profile_photo: string } | null = null;
+    // fetched.ksid 는 조회 성공 시점의 ID 스냅샷 — 등록 시 ksidInput.value 와 비교해
+    // 사용자가 ID 만 바꾸고 재조회 안 한 경우(stale fetched) 차단.
+    let fetched: { ksid: string; nickname: string; profile_photo: string } | null = null;
+
+    ksidInput.addEventListener('input', () => {
+      if (fetched && ksidInput.value.trim() !== fetched.ksid) {
+        fetched = null;
+        previewEl.hidden = true;
+        lookupBtn.textContent = '조회';
+      }
+    });
 
     lookupBtn.addEventListener('click', async () => {
       const ksid = ksidInput.value.trim();
@@ -660,9 +697,9 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
       try {
         const res = await callFn({ action: 'lookup-player', kingshot_id: ksid });
         if (res.ok) {
-          fetched = { nickname: res.nickname ?? '', profile_photo: res.profile_photo ?? '' };
+          fetched = { ksid, nickname: res.nickname ?? '', profile_photo: res.profile_photo ?? '' };
           if (fetched.profile_photo) { badgeImg.src = fetched.profile_photo; badgeImg.hidden = false; badgeInitial.hidden = true; }
-          else { badgeImg.hidden = true; badgeInitial.textContent = (fetched.nickname.charAt(0) || '?').toUpperCase(); (badgeInitial as HTMLElement).hidden = false; }
+          else { badgeImg.hidden = true; badgeInitial.textContent = (fetched.nickname.charAt(0) || '?').toUpperCase(); badgeInitial.hidden = false; }
           badgeNick.textContent = fetched.nickname;
           previewEl.hidden = false; lookupBtn.textContent = '재조회';
         } else { lookupErr.textContent = '플레이어를 찾을 수 없습니다'; lookupBtn.textContent = '조회'; }
@@ -674,6 +711,18 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
       const tag = tagInput.value.trim();
       if (!tag) { tagInput.focus(); return; }
       if (!fetched) return;
+
+      const ksid = ksidInput.value.trim();
+      if (ksid !== fetched.ksid) {
+        lookupErr.textContent = '킹샷 ID 가 변경되었습니다 — 재조회해주세요';
+        return;
+      }
+      // 같은 거점 중복 사용자 차단 (kingshot_id 기반).
+      if (ksid && badgeList.querySelector(`.cb-nr-cand-badge[data-ksid="${ksid}"]`)) {
+        lookupErr.textContent = '이 거점에 이미 등록된 사용자입니다';
+        return;
+      }
+
       addBtn.disabled = true;
       try {
         const res = await callFn({
@@ -681,7 +730,7 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
           target_id: targetData.target_id,
           alliance_tag: tag,
           rallier_nickname: fetched.nickname,
-          kingshot_id: ksidInput.value.trim() || null,
+          kingshot_id: ksid || null,
           profile_photo: fetched.profile_photo || null,
         });
         if (res.ok) {
@@ -689,11 +738,16 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
             candidate_id: res.candidate_id,
             alliance_tag: tag,
             rallier_nickname: fetched.nickname,
-            kingshot_id: ksidInput.value.trim() || null,
+            kingshot_id: ksid || null,
             profile_photo: fetched.profile_photo || null,
           });
           tagInput.value = ''; ksidInput.value = ''; fetched = null;
-          previewEl.hidden = true; lookupBtn.textContent = '조회'; tagInput.focus();
+          previewEl.hidden = true; lookupBtn.textContent = '조회'; lookupErr.textContent = '';
+          tagInput.focus();
+        } else {
+          lookupErr.textContent = res.error === 'duplicate_candidate'
+            ? '이 거점에 이미 등록된 사용자입니다'
+            : `오류: ${res.error}`;
         }
       } finally { addBtn.disabled = false; }
     });

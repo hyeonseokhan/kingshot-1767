@@ -1132,7 +1132,8 @@
   from { opacity: 0; transform: translateY(-4px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-.cb-nr-badge-avatar {
+.cb-nr-badge-avatar,
+.cb-nr-preview-avatar {
   width: 26px;
   height: 26px;
   border-radius: 50%;
@@ -1146,20 +1147,30 @@
   font-weight: 800;
   color: #fff;
 }
-.cb-nr-badge-img {
+.cb-nr-badge-img,
+.cb-nr-preview-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
 }
-.cb-nr-badge-initial { line-height: 1; }
+/* [hidden] 속성을 가진 img/span 을 display:block/inline 셀렉터가 override 하지 못하도록 강제 숨김.
+   조회 결과에 profile_photo 가 없을 때 JS 가 img.hidden=true 로 토글해도 display:block 이 이겨버려
+   미리보기에서 빈 img 박스가 닉네임을 가리는 회귀를 방지. */
+.cb-nr-badge-img[hidden],
+.cb-nr-badge-initial[hidden],
+.cb-nr-preview-img[hidden],
+.cb-nr-preview-initial[hidden] { display: none !important; }
+.cb-nr-badge-initial,
+.cb-nr-preview-initial { line-height: 1; }
 .cb-nr-badge-tag {
   font-size: 10.5px;
   font-weight: 700;
   color: var(--cb-text-faint);
   letter-spacing: 0.02em;
 }
-.cb-nr-badge-nick {
+.cb-nr-badge-nick,
+.cb-nr-preview-nick {
   font-size: 12.5px;
   font-weight: 700;
   color: var(--cb-success);
@@ -1220,7 +1231,7 @@
   gap: 8px;
 }
 /* 프리뷰 뱃지 — 등록 전 미리보기 */
-.cb-nr-badge {
+.cb-nr-preview-badge {
   display: inline-flex;
   align-items: center;
   gap: 7px;
