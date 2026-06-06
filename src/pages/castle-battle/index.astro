@@ -30,9 +30,9 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
 >
   {/* 관리자 도구 팝오버 — header-actions slot 주입. SSR 기본 hidden → 클라이언트가 is_admin 확인 후 노출. */}
   <details class="cb-admin-pop" id="cb-admin-pop-root" slot="header-actions" hidden>
-    <summary>🛠 관리자 도구</summary>
+    <summary>관리자 도구</summary>
     <div class="cb-admin-pop-panel">
-      <div class="cb-admin-pop-head">🛠 관리자 도구</div>
+      <div class="cb-admin-pop-head">관리자 도구</div>
       <div class="cb-admin-pop-body">
 
         <div class="cb-admin-loading" id="cb-admin-loading" hidden>확인 중...</div>
@@ -41,8 +41,8 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
         <div class="cb-admin-section" id="cb-admin-setup-section" hidden>
           <div class="cb-admin-section-label">설정 단계</div>
           <div class="cb-admin-section-actions">
-            <button class="cb-btn cb-btn-sm" id="cb-admin-new-round-btn" hidden>＋ 신규 회차 등록</button>
-            <button class="cb-btn cb-btn-secondary cb-btn-sm" id="cb-admin-edit-round-btn" hidden>✏ 회차 수정</button>
+            <button class="cb-btn cb-btn-sm" id="cb-admin-new-round-btn" hidden>신규 회차 등록</button>
+            <button class="cb-btn cb-btn-secondary cb-btn-sm" id="cb-admin-edit-round-btn" hidden>회차 수정</button>
           </div>
         </div>
 
@@ -50,9 +50,10 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
         <div class="cb-admin-section" id="cb-admin-vote-section" hidden>
           <div class="cb-admin-section-label">진행 단계</div>
           <div class="cb-admin-section-actions">
-            <button class="cb-btn cb-btn-sm" id="cb-admin-start-vote-btn" hidden>▶ 투표 시작</button>
-            <button class="cb-btn cb-btn-sm" id="cb-admin-close-vote-btn" hidden>⏹ 투표 마감</button>
-            <button class="cb-btn cb-btn-danger cb-btn-sm" id="cb-admin-reset-vote-btn" hidden>↺ 투표 초기화</button>
+            <button class="cb-btn cb-btn-sm" id="cb-admin-start-vote-btn" hidden>투표 시작</button>
+            <button class="cb-btn cb-btn-sm" id="cb-admin-close-vote-btn" hidden>투표 마감</button>
+            <button class="cb-btn cb-btn-secondary cb-btn-sm" id="cb-admin-reopen-vote-btn" hidden>투표 마감 취소</button>
+            <button class="cb-btn cb-btn-danger cb-btn-sm" id="cb-admin-reset-vote-btn" hidden>투표 초기화</button>
           </div>
           <div class="cb-admin-section-err" id="cb-admin-section-err"></div>
         </div>
@@ -222,6 +223,7 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
     const hasRound = !!round && status !== 'archived';
     const isPreparing = status === 'preparing';
     const isVoting = status === 'voting';
+    const isVotingClosed = status === 'voting_closed';
 
     showEl('cb-admin-loading', false);
     showEl('cb-admin-setup-section', true);
@@ -234,6 +236,7 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
     // 진행 단계 버튼
     showEl('cb-admin-start-vote-btn', isPreparing);
     showEl('cb-admin-close-vote-btn', isVoting);
+    showEl('cb-admin-reopen-vote-btn', isVotingClosed);   // voting_closed 상태에서만 — 실수 undo 용
     showEl('cb-admin-reset-vote-btn', isVoting);
 
     const errEl = document.getElementById('cb-admin-section-err');
@@ -845,6 +848,21 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
     const errEl = document.getElementById('cb-admin-section-err');
     try {
       const res = await callFn({ action: 'admin-set-round-status', round_id: adminCurrentRoundId, status: 'voting_closed' });
+      if (!res.ok) { if (errEl) errEl.textContent = `오류: ${res.error}`; return; }
+      window.location.reload();
+    } catch { if (errEl) errEl.textContent = '네트워크 오류'; }
+  });
+
+  // 투표 마감을 실수로 눌렀을 때 되돌리기 — voting_closed → voting 전이.
+  // 기존 표는 보존, voting_closed_at 만 NULL 로 클리어 (EF 에서 처리).
+  document.getElementById('cb-admin-reopen-vote-btn')?.addEventListener('click', async () => {
+    if (adminCurrentRoundId === null) return;
+    const errEl = document.getElementById('cb-admin-section-err');
+    const ok = await (window as any).appConfirm?.('투표 마감을 취소하고 투표 진행 중 상태로 되돌립니다. 계속하시겠습니까?')
+      ?? window.confirm('투표 마감을 취소하시겠습니까?');
+    if (!ok) return;
+    try {
+      const res = await callFn({ action: 'admin-set-round-status', round_id: adminCurrentRoundId, status: 'voting' });
       if (!res.ok) { if (errEl) errEl.textContent = `오류: ${res.error}`; return; }
       window.location.reload();
     } catch { if (errEl) errEl.textContent = '네트워크 오류'; }

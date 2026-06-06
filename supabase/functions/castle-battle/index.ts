@@ -183,11 +183,13 @@ function isValidPlayerId(id: unknown): id is string {
 
 const VALID_STATUSES = ["preparing", "voting", "voting_closed", "results_in", "archived"];
 
-// 상태 전이 규칙
+// 상태 전이 규칙.
+// voting_closed → voting 은 운영자가 "투표 마감"을 실수로 눌렀을 때의 undo 용 — 허용.
+// 그 외 역방향 전이는 금지.
 const STATUS_TRANSITIONS: Record<string, string[]> = {
   preparing: ["voting"],
   voting: ["voting_closed"],
-  voting_closed: ["results_in"],
+  voting_closed: ["voting", "results_in"],
   results_in: ["archived"],
   archived: [],
 };
@@ -454,9 +456,23 @@ async function adminSetRoundStatus(
   if (!allowed.includes(status)) throw new Error("invalid_status_transition");
 
   const patch: Record<string, unknown> = { status };
-  if (status === "voting") patch.voting_opened_at = new Date().toISOString();
-  if (status === "voting_closed") patch.voting_closed_at = new Date().toISOString();
-  if (status === "results_in") patch.results_entered_at = new Date().toISOString();
+  // 정방향 전이만 타임스탬프 갱신.
+  // preparing → voting: voting_opened_at 최초 기록.
+  // voting → voting_closed: voting_closed_at 기록.
+  // voting_closed → voting (undo): voting_closed_at NULL 로 클리어. voting_opened_at 은 보존.
+  // voting_closed → results_in: results_entered_at 기록.
+  if (round.status === "preparing" && status === "voting") {
+    patch.voting_opened_at = new Date().toISOString();
+  }
+  if (round.status === "voting" && status === "voting_closed") {
+    patch.voting_closed_at = new Date().toISOString();
+  }
+  if (round.status === "voting_closed" && status === "voting") {
+    patch.voting_closed_at = null;
+  }
+  if (round.status === "voting_closed" && status === "results_in") {
+    patch.results_entered_at = new Date().toISOString();
+  }
 
   await dbPatch(`cb_rounds?id=eq.${roundId}`, patch);
   void me;
