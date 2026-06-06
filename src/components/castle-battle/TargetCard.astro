@@ -10,12 +10,14 @@ import LeaderPortrait from './LeaderPortrait.astro';
 
 interface Props {
   target: TargetView;
+  /** 거점 미등록 (회차는 있지만 슬롯에 cb_targets 행이 없을 때) — 자유전투와 동일 회색 스타일이되 라벨만 다름. */
+  isEmpty?: boolean;
 }
-const { target } = Astro.props;
+const { target, isEmpty = false } = Astro.props;
 
 const isCastle = target.slot === 'castle';
-const isFree = !target.is_open;
-const isVoted = target.my_vote !== null;
+const isFree = isEmpty || !target.is_open;  // 미등록도 회색 처리 (스타일 공유)
+const isVoted = !isEmpty && target.my_vote !== null;
 
 const imgUrl = isCastle ? '/castle-battle/캐슬.png' : '/castle-battle/포탑.png';
 const slotLabel = SLOT_LABEL[target.slot];
@@ -36,7 +38,7 @@ const slotLabel = SLOT_LABEL[target.slot];
         <span class="cb-target-name">{slotLabel}</span>
       </div>
       {isFree ? (
-        <span class="cb-target-tag tag-free">자유전투</span>
+        <span class="cb-target-tag tag-free">{isEmpty ? '미등록' : '자유전투'}</span>
       ) : isVoted ? (
         <span class="cb-target-tag tag-voted">✓ 투표함</span>
       ) : (
@@ -47,9 +49,18 @@ const slotLabel = SLOT_LABEL[target.slot];
 
   {isFree ? (
     <div class="cb-free-body">
-      <span class="cb-free-main">자유전투</span>
-      <span class="cb-free-sub">FREE BATTLE</span>
-      <div class="cb-free-desc">이번 회차는 베팅 대상에서 제외된 거점입니다</div>
+      {isEmpty ? (
+        <>
+          <span class="cb-free-main">미등록</span>
+          <div class="cb-free-desc">이번 회차에 거점 정보가 등록되지 않았습니다</div>
+        </>
+      ) : (
+        <>
+          <span class="cb-free-main">자유전투</span>
+          <span class="cb-free-sub">FREE BATTLE</span>
+          <div class="cb-free-desc">이번 회차는 베팅 대상에서 제외된 거점입니다</div>
+        </>
+      )}
     </div>
   ) : (
     /* 캐슬은 leader-portrait 가 이미 모든 정보 — leader-row 숨김 (castle-battle.css 룰).

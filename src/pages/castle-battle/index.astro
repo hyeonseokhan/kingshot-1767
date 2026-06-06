@@ -20,8 +20,6 @@ import { getActiveRound, getTargetsWithCandidates } from '@/lib/castle-battle/qu
 import '@/styles/castle-battle.css';
 
 const round = await getActiveRound();
-// SSR 시점엔 사용자 인증 정보 X — 클라이언트 측 hydration 후 본인 표 강조하려면
-// 별도 API/realtime 필요. Phase 1 은 anon view 만 (my_vote 모두 null).
 const targets = round ? await getTargetsWithCandidates(round.id, null) : [];
 const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
 ---
@@ -30,11 +28,44 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
   title="캐슬 전투 — 1767 서버 허브"
   description="캐슬 전투 회차별 거점 점령 집결자 예측 투표"
 >
+  {/* 관리자 도구 팝오버 — header-actions slot 주입. SSR 기본 hidden → 클라이언트가 is_admin 확인 후 노출. */}
+  <details class="cb-admin-pop" id="cb-admin-pop-root" slot="header-actions" hidden>
+    <summary>🛠 관리자 도구</summary>
+    <div class="cb-admin-pop-panel">
+      <div class="cb-admin-pop-head">🛠 관리자 도구</div>
+      <div class="cb-admin-pop-body">
+
+        <div class="cb-admin-loading" id="cb-admin-loading" hidden>확인 중...</div>
+
+        {/* 설정 단계 섹션 */}
+        <div class="cb-admin-section" id="cb-admin-setup-section" hidden>
+          <div class="cb-admin-section-label">설정 단계</div>
+          <div class="cb-admin-section-actions">
+            <button class="cb-btn cb-btn-sm" id="cb-admin-new-round-btn" hidden>＋ 신규 회차 등록</button>
+            <button class="cb-btn cb-btn-secondary cb-btn-sm" id="cb-admin-edit-round-btn" hidden>✏ 회차 수정</button>
+          </div>
+        </div>
+
+        {/* 진행 단계 섹션 */}
+        <div class="cb-admin-section" id="cb-admin-vote-section" hidden>
+          <div class="cb-admin-section-label">진행 단계</div>
+          <div class="cb-admin-section-actions">
+            <button class="cb-btn cb-btn-sm" id="cb-admin-start-vote-btn" hidden>▶ 투표 시작</button>
+            <button class="cb-btn cb-btn-sm" id="cb-admin-close-vote-btn" hidden>⏹ 투표 마감</button>
+            <button class="cb-btn cb-btn-danger cb-btn-sm" id="cb-admin-reset-vote-btn" hidden>↺ 투표 초기화</button>
+          </div>
+          <div class="cb-admin-section-err" id="cb-admin-section-err"></div>
+        </div>
+
+      </div>
+    </div>
+  </details>
+
   {round ? (
     <>
       <RoundHero round={round} roundIndex={round.id} totalVotes={totalVotes} />
       <Battlefield targets={targets} />
-      <TargetDetailDialog targets={targets} />
+      <TargetDetailDialog targets={targets} roundId={round?.id} roundStatus={round?.status} />
     </>
   ) : (
     <section class="cb-empty-round">
@@ -45,7 +76,730 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
       </p>
     </section>
   )}
+
+  {/* 신규 회차 등록 다이얼로그 */}
+  <dialog class="cb-nr-dlg" id="cb-nr-dlg">
+    <div class="cb-nr-inner">
+
+      <div class="cb-nr-header">
+        <h2 class="cb-nr-title">신규 회차 등록</h2>
+      </div>
+
+      <div class="cb-nr-body">
+
+        {/* 기본 정보 */}
+        <div class="cb-nr-section">
+          <div class="cb-nr-field">
+            <label class="cb-nr-label" for="cb-nr-date-input">
+              이벤트 시작 일시 <span class="cb-nr-label-note">KST 기준</span>
+            </label>
+            <input class="cb-nr-input" id="cb-nr-date-input" type="datetime-local" />
+          </div>
+        </div>
+
+        {/* 거점 설정 */}
+        <div class="cb-nr-section">
+          <div class="cb-nr-section-title">거점 설정</div>
+          <div class="cb-nr-section-desc">각 거점의 집결전 여부와 집결자 후보를 설정하세요.</div>
+
+          <div class="cb-nr-slots" id="cb-nr-slots">
+            {/* JavaScript 가 동적으로 렌더 */}
+          </div>
+        </div>
+
+      </div>
+
+      <div class="cb-nr-footer">
+        <div class="cb-nr-error" id="cb-nr-error"></div>
+        <div class="cb-nr-actions">
+          <button class="cb-btn cb-btn-secondary" id="cb-nr-cancel" type="button">취소</button>
+          <button class="cb-btn" id="cb-nr-submit" type="button">회차 등록</button>
+        </div>
+      </div>
+
+    </div>
+  </dialog>
+
+  {/* 회차 수정 다이얼로그 */}
+  <dialog class="cb-edit-dlg" id="cb-edit-dlg">
+    <div class="cb-nr-inner">
+      <div class="cb-nr-header">
+        <h2 class="cb-nr-title">회차 수정</h2>
+      </div>
+      <div class="cb-nr-body" id="cb-edit-body">
+        <div class="cb-edit-loading" id="cb-edit-loading">데이터 불러오는 중...</div>
+      </div>
+      <div class="cb-nr-footer">
+        <button class="cb-btn cb-btn-danger cb-btn-sm" id="cb-edit-delete-btn">회차 삭제</button>
+        <span class="cb-nr-error" id="cb-edit-error"></span>
+        <div class="cb-nr-actions">
+          <button class="cb-btn cb-btn-secondary cb-btn-sm" id="cb-edit-cancel">취소</button>
+          <button class="cb-btn cb-btn-sm" id="cb-edit-submit">저장</button>
+        </div>
+      </div>
+    </div>
+  </dialog>
+
 </CastleBattleLayout>
+
+<script>
+  // ─── 관리자 팝오버 게이트 ────────────────────────────────────
+  const AUTH_KEY = 'pnx-mb-auth-v1';
+  function checkAdmin(): boolean {
+    try {
+      const obj = JSON.parse(localStorage.getItem(AUTH_KEY) ?? '');
+      return obj?.record?.is_admin === true;
+    } catch { return false; }
+  }
+  function getAuthRecord(): { kingshot_id: string; is_admin: boolean; pin?: string } | null {
+    try {
+      const obj = JSON.parse(localStorage.getItem(AUTH_KEY) ?? '');
+      if (!obj?.record?.kingshot_id) return null;
+      return obj.record;
+    } catch { return null; }
+  }
+
+  function syncAdminGate(): void {
+    const root = document.getElementById('cb-admin-pop-root');
+    if (!root) return;
+    root.hidden = !checkAdmin();
+  }
+  document.addEventListener('app-auth-changed', syncAdminGate);
+  window.addEventListener('storage', (e) => { if (e.key === AUTH_KEY) syncAdminGate(); });
+  syncAdminGate();
+
+  // 팝오버 외부 클릭 시 닫기
+  document.addEventListener('click', (e) => {
+    const pop = document.getElementById('cb-admin-pop-root') as HTMLDetailsElement | null;
+    if (!pop || !pop.open) return;
+    if (!pop.contains(e.target as Node)) pop.open = false;
+  });
+
+  // ─── 신규 회차 다이얼로그 ────────────────────────────────────
+
+  import { SUPABASE_URL, SUPABASE_ANON_KEY } from '@/lib/shared/supabase';
+
+  const FN_URL = SUPABASE_URL + '/functions/v1/castle-battle';
+
+  const SLOTS = [
+    { slot: 'castle',        label: '캐슬',     defaultOpen: true },
+    { slot: 'turret_north',  label: '북쪽 포탑', defaultOpen: false },
+    { slot: 'turret_east',   label: '동쪽 포탑', defaultOpen: true },
+    { slot: 'turret_south',  label: '남쪽 포탑', defaultOpen: true },
+    { slot: 'turret_west',   label: '서쪽 포탑', defaultOpen: true },
+  ] as const;
+
+  async function callFn(body: Record<string, unknown>): Promise<any> {
+    const auth = getAuthRecord();
+    const base = auth ? { player_id: auth.kingshot_id, pin: auth.pin } : {};
+    const payload = { ...base, ...body };
+    const res = await fetch(FN_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: 'Bearer ' + SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify(payload),
+    });
+    return res.json();
+  }
+
+  // ─── 관리자 패널 동기화 ──────────────────────────────────────
+
+  type RoundStatus = 'preparing' | 'voting' | 'voting_closed' | 'results_in' | 'archived';
+  let adminCurrentRoundId: number | null = null;
+
+  function showEl(id: string, show: boolean): void {
+    const el = document.getElementById(id);
+    if (el) el.hidden = !show;
+  }
+
+  function syncAdminPanel(round: { id: number; status: RoundStatus } | null): void {
+    adminCurrentRoundId = round?.id ?? null;
+    const status = round?.status ?? null;
+
+    const hasRound = !!round && status !== 'archived';
+    const isPreparing = status === 'preparing';
+    const isVoting = status === 'voting';
+
+    showEl('cb-admin-loading', false);
+    showEl('cb-admin-setup-section', true);
+    showEl('cb-admin-vote-section', hasRound);
+
+    // 설정 단계 버튼
+    showEl('cb-admin-new-round-btn', !hasRound);
+    showEl('cb-admin-edit-round-btn', isPreparing);
+
+    // 진행 단계 버튼
+    showEl('cb-admin-start-vote-btn', isPreparing);
+    showEl('cb-admin-close-vote-btn', isVoting);
+    showEl('cb-admin-reset-vote-btn', isVoting);
+
+    const errEl = document.getElementById('cb-admin-section-err');
+    if (errEl) errEl.textContent = '';
+  }
+
+  // 패널이 열릴 때 현재 회차 조회
+  document.getElementById('cb-admin-pop-root')?.addEventListener('toggle', async (e) => {
+    const pop = e.currentTarget as HTMLDetailsElement;
+    if (!pop.open) return;
+    showEl('cb-admin-loading', true);
+    showEl('cb-admin-setup-section', false);
+    showEl('cb-admin-vote-section', false);
+    try {
+      const res = await callFn({ action: 'get-current-round' });
+      syncAdminPanel(res.round ?? null);
+    } catch {
+      showEl('cb-admin-loading', false);
+    }
+  });
+
+  // 진행 단계 공통 액션 핸들러
+  async function handleVoteAction(action: string, confirmMsg?: string): Promise<void> {
+    if (adminCurrentRoundId === null) return;
+    if (confirmMsg) {
+      const ok = await (window as any).appConfirm?.(confirmMsg, { variant: 'danger' }) ?? window.confirm(confirmMsg);
+      if (!ok) return;
+    }
+    const errEl = document.getElementById('cb-admin-section-err');
+    try {
+      const res = await callFn({ action, round_id: adminCurrentRoundId });
+      if (!res.ok) {
+        if (errEl) errEl.textContent = `오류: ${res.error}`;
+        return;
+      }
+      window.location.reload();
+    } catch (err) {
+      if (errEl) errEl.textContent = '네트워크 오류';
+    }
+  }
+
+  // ─── 회차 수정 다이얼로그 ────────────────────────────────────
+
+  async function openEditDlg(): Promise<void> {
+    const dlg = document.getElementById('cb-edit-dlg') as HTMLDialogElement;
+    const body = document.getElementById('cb-edit-body') as HTMLElement;
+    body.innerHTML = '<div class="cb-edit-loading">데이터 불러오는 중...</div>';
+    dlg.showModal();
+    adminCurrentRoundId = null;
+
+    try {
+      const res = await callFn({ action: 'admin-get-round-detail' });
+      if (!res.ok) {
+        const isAuthErr = res.error === 'invalid_pin' || res.error === 'wrong_pin' || res.error === 'not_admin';
+        body.innerHTML = `<div class="cb-edit-loading">${
+          isAuthErr
+            ? '인증이 만료됐습니다. 로그아웃 후 다시 로그인해 주세요.'
+            : `오류: ${res.error}`
+        }</div>`;
+        return;
+      }
+      if (!res.round) {
+        body.innerHTML = '<div class="cb-edit-loading">진행 중인 회차가 없습니다</div>';
+        return;
+      }
+      adminCurrentRoundId = res.round.id;
+
+      body.innerHTML = '';
+
+      // 이벤트 시작 일시
+      const kstMs = new Date(res.round.event_starts_at).getTime() + 9 * 3600_000;
+      const kstStr = new Date(kstMs).toISOString().slice(0, 16);
+      const dateSection = document.createElement('div');
+      dateSection.className = 'cb-nr-section';
+      dateSection.innerHTML = `
+        <div class="cb-nr-field">
+          <label class="cb-nr-label">이벤트 시작 일시 <span class="cb-nr-label-note">KST 기준</span></label>
+          <input class="cb-nr-input" type="datetime-local" id="cb-edit-date-input" value="${kstStr}" />
+        </div>
+      `;
+      body.appendChild(dateSection);
+
+      // 거점 슬롯 카드들
+      const slotSection = document.createElement('div');
+      slotSection.className = 'cb-nr-section';
+      const slotTitle = document.createElement('div');
+      slotTitle.className = 'cb-nr-section-title';
+      slotTitle.textContent = '거점별 집결자 설정';
+      slotSection.appendChild(slotTitle);
+      const slotWrap = document.createElement('div');
+      slotWrap.className = 'cb-nr-slots';
+      for (const target of res.targets) {
+        slotWrap.appendChild(buildEditSlotCard(target));
+      }
+      slotSection.appendChild(slotWrap);
+      body.appendChild(slotSection);
+
+    } catch {
+      body.innerHTML = '<div class="cb-edit-loading">불러오기 실패</div>';
+    }
+  }
+
+  function closeEditDlg(): void {
+    (document.getElementById('cb-edit-dlg') as HTMLDialogElement)?.close();
+  }
+
+  document.getElementById('cb-edit-cancel')?.addEventListener('click', closeEditDlg);
+  document.getElementById('cb-edit-dlg')?.addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) e.preventDefault();
+  });
+
+  document.getElementById('cb-edit-delete-btn')?.addEventListener('click', async () => {
+    if (adminCurrentRoundId === null) return;
+    const ok = await (window as any).appConfirm?.('회차를 삭제하면 모든 후보, 투표 데이터가 함께 삭제됩니다.', { variant: 'danger' })
+      ?? window.confirm('회차를 삭제하시겠습니까?');
+    if (!ok) return;
+    try {
+      const res = await callFn({ action: 'admin-delete-round', round_id: adminCurrentRoundId });
+      if (res.ok) { closeEditDlg(); window.location.reload(); }
+    } catch { /* ignore */ }
+  });
+
+  document.getElementById('cb-edit-submit')?.addEventListener('click', async () => {
+    if (adminCurrentRoundId === null) return;
+    const input = document.getElementById('cb-edit-date-input') as HTMLInputElement;
+    if (!input?.value) return;
+    const errEl = document.getElementById('cb-edit-error') as HTMLElement;
+    const submitBtn = document.getElementById('cb-edit-submit') as HTMLButtonElement;
+    submitBtn.disabled = true;
+    try {
+      const utcIso = new Date(new Date(input.value).getTime() - 9 * 3600_000).toISOString();
+      const res = await callFn({ action: 'admin-update-round', round_id: adminCurrentRoundId, event_starts_at: utcIso });
+      if (res.ok) { closeEditDlg(); window.location.reload(); }
+      else errEl.textContent = `오류: ${res.error}`;
+    } catch { errEl.textContent = '네트워크 오류'; }
+    finally { submitBtn.disabled = false; }
+  });
+
+  document.getElementById('cb-admin-edit-round-btn')?.addEventListener('click', openEditDlg);
+
+  // ─── 슬롯 렌더 ───────────────────────────────────────────────
+
+  function esc(str: string): string {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function buildSlotCard(slotDef: typeof SLOTS[number]): HTMLElement {
+    const card = document.createElement('div');
+    card.className = 'cb-nr-slot';
+    card.dataset.slot = slotDef.slot;
+
+    card.innerHTML = `
+      <div class="cb-nr-slot-header">
+        <span class="cb-nr-slot-label">${slotDef.label}</span>
+        <label class="cb-nr-slot-toggle">
+          <input type="checkbox" class="cb-nr-open-chk" ${slotDef.defaultOpen ? 'checked' : ''}>
+          <span>투표 진행</span>
+        </label>
+      </div>
+      <div class="cb-nr-cands ${slotDef.defaultOpen ? '' : 'is-hidden'}">
+        <div class="cb-nr-badge-list"></div>
+        <div class="cb-nr-form">
+          <div class="cb-nr-form-inputs">
+            <input class="cb-nr-input cb-nr-f-tag" type="text" placeholder="연맹 (PNX)" maxlength="20" />
+            <input class="cb-nr-input cb-nr-f-ksid" type="tel" placeholder="킹샷 ID" maxlength="15" pattern="[0-9]*" />
+            <button class="cb-nr-lookup-btn" type="button">조회</button>
+          </div>
+          <div class="cb-nr-form-preview" hidden>
+            <div class="cb-nr-preview-row">
+              <div class="cb-nr-badge">
+                <span class="cb-nr-badge-avatar">
+                  <img class="cb-nr-badge-img" alt="" hidden />
+                  <span class="cb-nr-badge-initial"></span>
+                </span>
+                <span class="cb-nr-badge-nick"></span>
+              </div>
+              <button class="cb-nr-add-btn" type="button">후보 등록</button>
+            </div>
+          </div>
+          <span class="cb-nr-lookup-err"></span>
+        </div>
+      </div>
+    `;
+
+    const chk = card.querySelector('.cb-nr-open-chk') as HTMLInputElement;
+    const cands = card.querySelector('.cb-nr-cands') as HTMLElement;
+    chk.addEventListener('change', () => cands.classList.toggle('is-hidden', !chk.checked));
+
+    const tagInput = card.querySelector('.cb-nr-f-tag') as HTMLInputElement;
+    const ksidInput = card.querySelector('.cb-nr-f-ksid') as HTMLInputElement;
+    const lookupBtn = card.querySelector('.cb-nr-lookup-btn') as HTMLButtonElement;
+    const previewEl = card.querySelector('.cb-nr-form-preview') as HTMLElement;
+    const badgeImg = card.querySelector('.cb-nr-badge-img') as HTMLImageElement;
+    const badgeInitial = card.querySelector('.cb-nr-badge-initial') as HTMLElement;
+    const badgeNick = card.querySelector('.cb-nr-badge-nick') as HTMLElement;
+    const lookupErr = card.querySelector('.cb-nr-lookup-err') as HTMLElement;
+    const addBtn = card.querySelector('.cb-nr-add-btn') as HTMLButtonElement;
+    const badgeList = card.querySelector('.cb-nr-badge-list') as HTMLElement;
+
+    let fetched: { nickname: string; profile_photo: string } | null = null;
+
+    // ─ 조회 ─
+    lookupBtn.addEventListener('click', async () => {
+      const ksid = ksidInput.value.trim();
+      if (!/^\d{4,15}$/.test(ksid)) { ksidInput.focus(); return; }
+      lookupBtn.disabled = true;
+      lookupBtn.textContent = '...';
+      fetched = null;
+      previewEl.hidden = true;
+      lookupErr.textContent = '';
+
+      try {
+        const res = await callFn({ action: 'lookup-player', kingshot_id: ksid });
+        if (res.ok) {
+          fetched = { nickname: res.nickname ?? '', profile_photo: res.profile_photo ?? '' };
+          if (fetched.profile_photo) {
+            badgeImg.src = fetched.profile_photo;
+            badgeImg.hidden = false;
+            badgeInitial.hidden = true;
+          } else {
+            badgeImg.hidden = true;
+            badgeInitial.textContent = (fetched.nickname.charAt(0) || '?').toUpperCase();
+            (badgeInitial as HTMLElement).hidden = false;
+          }
+          badgeNick.textContent = fetched.nickname;
+          previewEl.hidden = false;
+          lookupBtn.textContent = '재조회';
+        } else {
+          lookupErr.textContent = '플레이어를 찾을 수 없습니다';
+          lookupBtn.textContent = '조회';
+        }
+      } catch {
+        lookupBtn.textContent = '조회';
+      } finally {
+        lookupBtn.disabled = false;
+      }
+    });
+
+    // ─ 후보 등록 ─
+    addBtn.addEventListener('click', () => {
+      const tag = tagInput.value.trim();
+      if (!tag) { tagInput.focus(); return; }
+      if (!fetched) return;
+
+      const ksid = ksidInput.value.trim();
+      const photoSrc = fetched.profile_photo;
+      const nick = fetched.nickname;
+
+      const item = document.createElement('div');
+      item.className = 'cb-nr-cand-badge';
+      item.dataset.tag = tag;
+      item.dataset.nick = nick;
+      item.dataset.ksid = ksid;
+      item.dataset.photo = photoSrc;
+
+      const avatarHtml = photoSrc
+        ? `<img class="cb-nr-badge-img" src="${esc(photoSrc)}" alt="" />`
+        : `<span class="cb-nr-badge-initial">${esc(nick.charAt(0).toUpperCase() || '?')}</span>`;
+
+      item.innerHTML = `
+        <span class="cb-nr-badge-avatar">${avatarHtml}</span>
+        <span class="cb-nr-badge-tag">${esc(tag)}</span>
+        <span class="cb-nr-badge-nick">${esc(nick)}</span>
+        <button class="cb-nr-badge-remove" type="button" title="제거">✕</button>
+      `;
+      item.querySelector('.cb-nr-badge-remove')!.addEventListener('click', () => item.remove());
+      badgeList.appendChild(item);
+
+      // 폼 초기화
+      tagInput.value = '';
+      ksidInput.value = '';
+      fetched = null;
+      previewEl.hidden = true;
+      lookupBtn.textContent = '조회';
+      tagInput.focus();
+    });
+
+    return card;
+  }
+
+  // ─── 다이얼로그 열기/닫기 ────────────────────────────────────
+
+  function todayDatetimeLocal(): string {
+    const d = new Date();
+    d.setMinutes(0, 0, 0);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:00`;
+  }
+
+  function todayTitle(): string {
+    const d = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} 캐슬 전투`;
+  }
+
+  function openNewRoundDlg(): void {
+    const dlg = document.getElementById('cb-nr-dlg') as HTMLDialogElement;
+    const dateInput = document.getElementById('cb-nr-date-input') as HTMLInputElement;
+    const slotsEl = document.getElementById('cb-nr-slots') as HTMLElement;
+    const errEl = document.getElementById('cb-nr-error') as HTMLElement;
+
+    // 초기화
+    dateInput.value = todayDatetimeLocal();
+    errEl.textContent = '';
+    slotsEl.innerHTML = '';
+    for (const s of SLOTS) slotsEl.appendChild(buildSlotCard(s));
+
+    dlg.showModal();
+
+    // 팝오버 닫기
+    const pop = document.getElementById('cb-admin-pop-root') as HTMLDetailsElement | null;
+    if (pop) pop.open = false;
+  }
+
+  function closeNewRoundDlg(): void {
+    const dlg = document.getElementById('cb-nr-dlg') as HTMLDialogElement;
+    if (dlg.open) dlg.close();
+  }
+
+  // ─── 회차 수정 다이얼로그 — 슬롯 카드 빌더 ──────────────────
+
+  const SLOT_LABELS: Record<string, string> = {
+    castle: '캐슬', turret_north: '북쪽 포탑',
+    turret_east: '동쪽 포탑', turret_south: '남쪽 포탑', turret_west: '서쪽 포탑',
+  };
+
+  function addEditBadge(
+    badgeList: HTMLElement,
+    cand: { candidate_id: number; alliance_tag: string; rallier_nickname: string; kingshot_id?: string | null; profile_photo?: string | null },
+  ): void {
+    const photo = cand.profile_photo ?? '';
+    const nick = cand.rallier_nickname ?? '';
+    const tag = cand.alliance_tag ?? '';
+    const item = document.createElement('div');
+    item.className = 'cb-nr-cand-badge';
+    item.dataset.candidateId = String(cand.candidate_id);
+    const avatarHtml = photo
+      ? `<img class="cb-nr-badge-img" src="${esc(photo)}" alt="" />`
+      : `<span class="cb-nr-badge-initial">${esc((nick.charAt(0) || '?').toUpperCase())}</span>`;
+    item.innerHTML = `
+      <span class="cb-nr-badge-avatar">${avatarHtml}</span>
+      <span class="cb-nr-badge-tag">${esc(tag)}</span>
+      <span class="cb-nr-badge-nick">${esc(nick)}</span>
+      <button class="cb-nr-badge-remove" type="button" title="제거">✕</button>
+    `;
+    item.querySelector('.cb-nr-badge-remove')!.addEventListener('click', async () => {
+      try {
+        const r = await callFn({ action: 'admin-remove-candidate', candidate_id: cand.candidate_id });
+        if (r.ok) item.remove();
+      } catch { /* ignore */ }
+    });
+    badgeList.appendChild(item);
+  }
+
+  function buildEditSlotCard(targetData: {
+    target_id: number; slot: string; is_open: boolean;
+    candidates: Array<{ candidate_id: number; alliance_tag: string; rallier_nickname: string; kingshot_id?: string | null; profile_photo?: string | null }>;
+  }): HTMLElement {
+    const card = document.createElement('div');
+    card.className = 'cb-nr-slot';
+    card.dataset.slot = targetData.slot;
+    card.dataset.targetId = String(targetData.target_id);
+
+    card.innerHTML = `
+      <div class="cb-nr-slot-header">
+        <span class="cb-nr-slot-label">${SLOT_LABELS[targetData.slot] ?? targetData.slot}</span>
+        <label class="cb-nr-slot-toggle">
+          <input type="checkbox" class="cb-nr-open-chk" ${targetData.is_open ? 'checked' : ''}>
+          <span>투표 진행</span>
+        </label>
+      </div>
+      <div class="cb-nr-cands ${targetData.is_open ? '' : 'is-hidden'}">
+        <div class="cb-nr-badge-list"></div>
+        <div class="cb-nr-form">
+          <div class="cb-nr-form-inputs">
+            <input class="cb-nr-input cb-nr-f-tag" type="text" placeholder="연맹 (PNX)" maxlength="20" />
+            <input class="cb-nr-input cb-nr-f-ksid" type="tel" placeholder="킹샷 ID" maxlength="15" pattern="[0-9]*" />
+            <button class="cb-nr-lookup-btn" type="button">조회</button>
+          </div>
+          <div class="cb-nr-form-preview" hidden>
+            <div class="cb-nr-preview-row">
+              <div class="cb-nr-badge">
+                <span class="cb-nr-badge-avatar">
+                  <img class="cb-nr-badge-img" alt="" hidden />
+                  <span class="cb-nr-badge-initial"></span>
+                </span>
+                <span class="cb-nr-badge-nick"></span>
+              </div>
+              <button class="cb-nr-add-btn" type="button">후보 등록</button>
+            </div>
+          </div>
+          <span class="cb-nr-lookup-err"></span>
+        </div>
+      </div>
+    `;
+
+    const chk = card.querySelector('.cb-nr-open-chk') as HTMLInputElement;
+    const cands = card.querySelector('.cb-nr-cands') as HTMLElement;
+    chk.addEventListener('change', async () => {
+      cands.classList.toggle('is-hidden', !chk.checked);
+      await callFn({ action: 'admin-set-target-open', target_id: targetData.target_id, is_open: chk.checked });
+    });
+
+    const badgeList = card.querySelector('.cb-nr-badge-list') as HTMLElement;
+    for (const cand of targetData.candidates) addEditBadge(badgeList, cand);
+
+    const tagInput = card.querySelector('.cb-nr-f-tag') as HTMLInputElement;
+    const ksidInput = card.querySelector('.cb-nr-f-ksid') as HTMLInputElement;
+    const lookupBtn = card.querySelector('.cb-nr-lookup-btn') as HTMLButtonElement;
+    const previewEl = card.querySelector('.cb-nr-form-preview') as HTMLElement;
+    const badgeImg = card.querySelector('.cb-nr-badge-img') as HTMLImageElement;
+    const badgeInitial = card.querySelector('.cb-nr-badge-initial') as HTMLElement;
+    const badgeNick = card.querySelector('.cb-nr-badge-nick') as HTMLElement;
+    const lookupErr = card.querySelector('.cb-nr-lookup-err') as HTMLElement;
+    const addBtn = card.querySelector('.cb-nr-add-btn') as HTMLButtonElement;
+
+    let fetched: { nickname: string; profile_photo: string } | null = null;
+
+    lookupBtn.addEventListener('click', async () => {
+      const ksid = ksidInput.value.trim();
+      if (!/^\d{4,15}$/.test(ksid)) { ksidInput.focus(); return; }
+      lookupBtn.disabled = true; lookupBtn.textContent = '...';
+      fetched = null; previewEl.hidden = true; lookupErr.textContent = '';
+      try {
+        const res = await callFn({ action: 'lookup-player', kingshot_id: ksid });
+        if (res.ok) {
+          fetched = { nickname: res.nickname ?? '', profile_photo: res.profile_photo ?? '' };
+          if (fetched.profile_photo) { badgeImg.src = fetched.profile_photo; badgeImg.hidden = false; badgeInitial.hidden = true; }
+          else { badgeImg.hidden = true; badgeInitial.textContent = (fetched.nickname.charAt(0) || '?').toUpperCase(); (badgeInitial as HTMLElement).hidden = false; }
+          badgeNick.textContent = fetched.nickname;
+          previewEl.hidden = false; lookupBtn.textContent = '재조회';
+        } else { lookupErr.textContent = '플레이어를 찾을 수 없습니다'; lookupBtn.textContent = '조회'; }
+      } catch { lookupBtn.textContent = '조회'; }
+      finally { lookupBtn.disabled = false; }
+    });
+
+    addBtn.addEventListener('click', async () => {
+      const tag = tagInput.value.trim();
+      if (!tag) { tagInput.focus(); return; }
+      if (!fetched) return;
+      addBtn.disabled = true;
+      try {
+        const res = await callFn({
+          action: 'admin-add-candidate-full',
+          target_id: targetData.target_id,
+          alliance_tag: tag,
+          rallier_nickname: fetched.nickname,
+          kingshot_id: ksidInput.value.trim() || null,
+          profile_photo: fetched.profile_photo || null,
+        });
+        if (res.ok) {
+          addEditBadge(badgeList, {
+            candidate_id: res.candidate_id,
+            alliance_tag: tag,
+            rallier_nickname: fetched.nickname,
+            kingshot_id: ksidInput.value.trim() || null,
+            profile_photo: fetched.profile_photo || null,
+          });
+          tagInput.value = ''; ksidInput.value = ''; fetched = null;
+          previewEl.hidden = true; lookupBtn.textContent = '조회'; tagInput.focus();
+        }
+      } finally { addBtn.disabled = false; }
+    });
+
+    return card;
+  }
+
+  // ─── 회차 등록 제출 ──────────────────────────────────────────
+
+  async function submitNewRound(): Promise<void> {
+    const auth = getAuthRecord();
+    if (!auth) { alert('로그인이 필요합니다.'); return; }
+
+    const dateVal = (document.getElementById('cb-nr-date-input') as HTMLInputElement).value;
+    const errEl = document.getElementById('cb-nr-error') as HTMLElement;
+    const submitBtn = document.getElementById('cb-nr-submit') as HTMLButtonElement;
+
+    if (!dateVal) { errEl.textContent = '이벤트 시작 일시를 선택해 주세요.'; return; }
+
+    // 거점 데이터 수집
+    type Candidate = { alliance_tag: string; rallier_nickname: string; kingshot_id?: string; profile_photo?: string };
+    const slotsData: Array<{ slot: string; is_open: boolean; candidates: Candidate[] }> = [];
+
+    let hasError = false;
+    document.querySelectorAll<HTMLElement>('.cb-nr-slot').forEach((card) => {
+      const slot = card.dataset.slot!;
+      const isOpen = (card.querySelector('.cb-nr-open-chk') as HTMLInputElement).checked;
+      const candidates: Candidate[] = [];
+
+      if (isOpen) {
+        card.querySelectorAll<HTMLElement>('.cb-nr-cand-badge').forEach((badge) => {
+          candidates.push({
+            alliance_tag: badge.dataset.tag!,
+            rallier_nickname: badge.dataset.nick!,
+            kingshot_id: badge.dataset.ksid || undefined,
+            profile_photo: badge.dataset.photo || undefined,
+          });
+        });
+      }
+
+      slotsData.push({ slot, is_open: isOpen, candidates });
+    });
+
+    if (hasError) return;
+
+    submitBtn.disabled = true;
+    errEl.textContent = '';
+
+    try {
+      const eventStartsAt = new Date(dateVal).toISOString();
+      const res = await callFn({
+        action: 'admin-setup-round',
+        event_starts_at: eventStartsAt,
+        targets: slotsData,
+      });
+
+      if (!res.ok) {
+        const msgs: Record<string, string> = {
+          not_admin: '관리자 권한이 없습니다.',
+          wrong_pin: '인증 정보가 만료되었습니다. 다시 로그인해 주세요.',
+          missing_field: '필수 항목이 누락되었습니다.',
+          unexpected_error: '이미 진행 중인 회차가 있거나 서버 오류가 발생했습니다.',
+        };
+        errEl.textContent = msgs[res.error] ?? `오류: ${res.error}`;
+        return;
+      }
+
+      closeNewRoundDlg();
+      window.location.reload();
+    } catch (err) {
+      errEl.textContent = '네트워크 오류: ' + (err as Error).message;
+    } finally {
+      submitBtn.disabled = false;
+    }
+  }
+
+  // ─── 이벤트 와이어업 ─────────────────────────────────────────
+
+  document.getElementById('cb-admin-new-round-btn')?.addEventListener('click', openNewRoundDlg);
+  document.getElementById('cb-nr-cancel')?.addEventListener('click', closeNewRoundDlg);
+  document.getElementById('cb-nr-submit')?.addEventListener('click', submitNewRound);
+
+  document.getElementById('cb-admin-start-vote-btn')?.addEventListener('click', async () => {
+    if (adminCurrentRoundId === null) return;
+    const errEl = document.getElementById('cb-admin-section-err');
+    try {
+      const res = await callFn({ action: 'admin-set-round-status', round_id: adminCurrentRoundId, status: 'voting' });
+      if (!res.ok) { if (errEl) errEl.textContent = `오류: ${res.error}`; return; }
+      window.location.reload();
+    } catch { if (errEl) errEl.textContent = '네트워크 오류'; }
+  });
+
+  document.getElementById('cb-admin-close-vote-btn')?.addEventListener('click', async () => {
+    if (adminCurrentRoundId === null) return;
+    const errEl = document.getElementById('cb-admin-section-err');
+    try {
+      const res = await callFn({ action: 'admin-set-round-status', round_id: adminCurrentRoundId, status: 'voting_closed' });
+      if (!res.ok) { if (errEl) errEl.textContent = `오류: ${res.error}`; return; }
+      window.location.reload();
+    } catch { if (errEl) errEl.textContent = '네트워크 오류'; }
+  });
+
+  document.getElementById('cb-admin-reset-vote-btn')?.addEventListener('click', () =>
+    handleVoteAction('admin-reset-votes', '모든 투표를 초기화하고 준비 중 상태로 돌아갑니다. 계속하시겠습니까?')
+  );
+</script>
 
 <style is:global>
   .cb-empty-round {
@@ -57,20 +811,19 @@ const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
     border: 1px solid var(--cb-border);
     border-radius: 12px;
   }
-  .cb-empty-icon {
-    font-size: 48px;
-    margin-bottom: 12px;
-  }
+  .cb-empty-icon { font-size: 48px; margin-bottom: 12px; }
   .cb-empty-title {
-    font-size: 18px;
-    font-weight: 800;
-    color: var(--cb-text);
-    margin: 0 0 8px;
+    font-size: 18px; font-weight: 800;
+    color: var(--cb-text); margin: 0 0 8px;
   }
   .cb-empty-body {
-    font-size: 13px;
-    color: var(--cb-text-dim);
-    line-height: 1.6;
-    margin: 0;
+    font-size: 13px; color: var(--cb-text-dim);
+    line-height: 1.6; margin: 0;
+  }
+
+  /* 관리자 현재 회차 상태 */
+  .cb-admin-round-status {
+    font-size: 11px; color: var(--cb-text-dim);
+    margin-top: 4px; padding: 0 2px;
   }
 </style>

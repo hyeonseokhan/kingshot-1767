@@ -3,7 +3,7 @@
 // 비로그인: 텍스트 "로그인" 버튼 (플랫)
 // 로그인:   [아바타] [닉네임] ▾  → 클릭 시 드롭다운 (로그아웃)
 //
-// 상태 source: localStorage('pnx-sk-auth-v1')
+// 상태 source: localStorage('pnx-mb-auth-v1')
 // 상태 sync 3채널:
 //   1) 같은 탭: 'app-auth-changed' (survey.ts / auth-dialog.ts 가 dispatch)
 //   2) 다른 탭: 'storage'
@@ -61,7 +61,7 @@
 
 <script>
   (function () {
-    const AUTH_KEY = 'pnx-sk-auth-v1';
+    const AUTH_KEY = 'pnx-mb-auth-v1';
     const root = document.getElementById('hu-root');
     const loginBtn = document.getElementById('hu-login');
     const card = document.getElementById('hu-card');
@@ -81,8 +81,6 @@
       is_admin?: boolean;
     }
     interface AuthState {
-      token: string;
-      expires_at: string;
       record: AuthRecord;
     }
     function readAuth(): AuthState | null {
@@ -90,7 +88,7 @@
         const raw = localStorage.getItem(AUTH_KEY);
         if (!raw) return null;
         const obj = JSON.parse(raw);
-        if (typeof obj?.token !== 'string' || !obj?.record) return null;
+        if (!obj?.record?.kingshot_id) return null;
         return obj as AuthState;
       } catch { return null; }
     }
@@ -148,12 +146,6 @@
     // 드롭다운 로그아웃 → KvK 의 sk-logout-btn 트리거 (있으면) 또는 fallback
     logoutItem.addEventListener('click', () => {
       closeDropdown();
-      const sk = document.getElementById('sk-logout-btn') as HTMLButtonElement | null;
-      if (sk) {
-        sk.click();
-        return;
-      }
-      // KvK 페이지가 아닐 때 fallback — confirm + localStorage 제거
       if (confirm('로그아웃 하시겠습니까?')) {
         try { localStorage.removeItem(AUTH_KEY); } catch { /* */ }
         document.dispatchEvent(new CustomEvent('app-auth-changed'));
