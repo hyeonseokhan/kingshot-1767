@@ -11,6 +11,6 @@
  *     클라 < 서버 → 클라가 [버프 예약] 노출하지만 서버 bootstrap 거부 → 잠금 placeholder
  *     클라 > 서버 → 클라가 [등록/수정] 노출하지만 서버는 마감 후 (현재 register API 는 deadline 미검증)
  *
- * 관련 i18n: '안내문 — 마감: UTC 5월 16일 01:00' 도 같이 변경 필요 (ko/en).
+ * 관련 i18n: '안내문 — 마감: UTC 6월 14일 00:00' 도 같이 변경 필요 (ko/en).
  */
-export const SURVEY_DEADLINE_ISO = '2026-05-16T01:00:00Z';
+export const SURVEY_DEADLINE_ISO = '2026-06-14T00:00:00Z';

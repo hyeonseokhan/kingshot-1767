@@ -699,7 +699,7 @@ export const ko = {
         triggerLabel: '필독 안내문',
         signup: {
           title: '설문 등록',
-          deadline: '마감: <strong>UTC 5월 16일 01:00</strong>',
+          deadline: '마감: <strong>UTC 6월 14일 00:00</strong>',
           eligibility: '자격: <strong>TC 26 이상</strong>',
         },
         ranking: {
@@ -875,8 +875,8 @@ export const ko = {
           body2: '먼저 선점한 사람이 우선. 동일 시간에 한 명만 들어갑니다.',
         },
         window: {
-          title: '선택 가능 시간',
-          body: '<strong>UTC 5월 16일 01:00 ~ 03:00</strong> (2시간) 동안 지정 가능.',
+          title: '선택 가능 기간',
+          body: '<strong>운영자가 예약을 마감하기 전까지</strong> 언제든 지정 가능.',
         },
         caution: {
           title: '주의사항',

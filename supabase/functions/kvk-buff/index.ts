@@ -167,7 +167,7 @@ async function authenticate(
  *   클라 < 서버 → 클라 [버프 예약] 노출되지만 서버 bootstrap 거부 → 잠금 placeholder 표시
  *   클라 > 서버 → 클라 [등록/수정] 노출되지만 서버는 마감 후 (현재 register API 는 deadline 미검증)
  */
-const DEADLINE_ISO = "2026-05-16T01:00:00Z";
+const DEADLINE_ISO = "2026-06-14T00:00:00Z";
 
 // !!! TEST_MODE 분기 helper — 테스트 종료 후 제거 대상 !!!
 //   isTest=true 면 _test 테이블/RPC 이름 반환.

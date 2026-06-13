@@ -82,7 +82,7 @@ interface PlayerInfo {
 /** TC(센터) 레벨 최소 자격. 서버측 검증과 일치 유지 (kvk-survey/index.ts MIN_CITY_LEVEL). */
 const MIN_CITY_LEVEL = 26;
 
-/** 설문 등록 마감 시각 (UTC). 안내문의 UTC 5월 16일 01:00 과 일치 유지.
+/** 설문 등록 마감 시각 (UTC). 안내문의 UTC 6월 14일 00:00 과 일치 유지.
  *  단일 source — src/lib/survey-deadline.ts. 클라/서버 동기화 정책은 그 파일 참조. */
 /** urgency 단계 (남은 시간 ms): 24h 이하 = 노랑, 6h 이하 = 빨강 + pulse */
 const URGENCY_WARN_MS = 24 * 60 * 60 * 1000;

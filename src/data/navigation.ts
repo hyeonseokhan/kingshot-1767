@@ -15,22 +15,22 @@ export type NavTab = {
 };
 
 export const tabs: NavTab[] = [
-  // KvK 설문 — 시즌 운영 중단으로 상단 메뉴 숨김. 페이지(/survey/) 자체는 살아있음.
+  {
+    id: 'kvk',
+    title: ko.nav.kvk,
+    titleKey: 'nav.kvk',
+    path: '/survey/',
+    pathPrefix: '/survey/',
+  },
+  // 캐슬 전투 — 서비스 준비 중으로 상단 메뉴 숨김. 페이지(/castle-battle/) 자체는 살아있음.
   // 재오픈 시 아래 주석 해제.
   // {
-  //   id: 'kvk',
-  //   title: ko.nav.kvk,
-  //   titleKey: 'nav.kvk',
-  //   path: '/survey/',
-  //   pathPrefix: '/survey/',
+  //   id: 'castle',
+  //   title: ko.nav.castle,
+  //   titleKey: 'nav.castle',
+  //   path: '/castle-battle/',
+  //   pathPrefix: '/castle-battle/',
   // },
-  {
-    id: 'castle',
-    title: ko.nav.castle,
-    titleKey: 'nav.castle',
-    path: '/castle-battle/',
-    pathPrefix: '/castle-battle/',
-  },
 ];
 
 /** 현재 URL 경로에 매칭되는 탭. 매칭 없으면 null (홈 등). */

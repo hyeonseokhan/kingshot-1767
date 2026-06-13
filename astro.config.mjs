@@ -6,6 +6,11 @@ export default defineConfig({
   site: 'https://1767.kingshot.co.kr',
   output: 'static',
   trailingSlash: 'always',
+  // 루트 진입은 설문 페이지로 보냄 (캐슬 전투 준비 중 — 설문만 노출).
+  // 정적 빌드에서 meta-refresh HTML 을 생성. 재오픈 시 이 항목 제거하고 홈 허브 복구.
+  redirects: {
+    '/': '/survey/',
+  },
   vite: {
     plugins: [
       tailwindcss(),

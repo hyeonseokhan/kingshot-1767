@@ -701,7 +701,7 @@ export const en: Translations = {
         triggerLabel: 'Must-read notice',
         signup: {
           title: 'Registration',
-          deadline: 'Deadline: <strong>UTC May 16, 01:00</strong>',
+          deadline: 'Deadline: <strong>UTC Jun 14, 00:00</strong>',
           eligibility: 'Eligibility: <strong>City Hall 26+</strong>',
         },
         ranking: {
@@ -876,8 +876,8 @@ export const en: Translations = {
           body2: 'First to claim wins. Only one user per slot.',
         },
         window: {
-          title: 'Booking window',
-          body: 'Open for <strong>UTC May 16, 01:00 ~ 03:00</strong> (2 hours).',
+          title: 'Booking period',
+          body: 'Open <strong>until the admin closes booking</strong> — pick anytime.',
         },
         caution: {
           title: 'Caution',
