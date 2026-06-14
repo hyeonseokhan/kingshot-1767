@@ -93,9 +93,11 @@ const KNOWN_ERRORS = new Set([
   "no_current_holder", "same_target", "target_not_found", "target_already_picked",
   // finalize
   "finalized", "already_finalized",
+  // admin-add (마감 후 수동 추가)
+  "not_in_survey", "already_participant",
   // 인증/검증
   "invalid_token", "token_expired",
-  "invalid_slot_idx", "invalid_turn_idx", "missing_auth",
+  "invalid_id", "invalid_slot_idx", "invalid_turn_idx", "missing_auth",
   // TEST_MODE
   "test_mode_only",
 ]);
@@ -317,6 +319,29 @@ async function adminStart(token: unknown, isTest: boolean) {
   }
 }
 
+/** [추가] — admin 만. 순위권 밖 인원을 빈 슬롯에 직접 등록 (마감 후에도 가능).
+ *  설문 제출자(city_level>=26)만 허용 — RPC 가 not_in_survey 로 거부.
+ *  RPC 반환 TEXT: 'ok' | 'slot_taken' (slot_taken 은 RETURN, 그 외 거부는 RAISE). */
+async function adminAdd(token: unknown, targetKingshotId: unknown, slotIdx: unknown, isTest: boolean) {
+  if (typeof targetKingshotId !== "string" || !/^\d{4,15}$/.test(targetKingshotId)) {
+    return { ok: false, error: "invalid_id" };
+  }
+  if (!isValidSlotIdx(slotIdx)) return { ok: false, error: "invalid_slot_idx" };
+  const auth = await authenticate(token);
+  if (!auth.ok) return auth;
+  if (!auth.me.is_admin) return { ok: false, error: "not_admin" };
+  try {
+    const result = await dbRpc(t("kvk_buff_admin_add", isTest), {
+      p_kingshot_id: targetKingshotId,
+      p_slot_idx: slotIdx,
+    }) as string | null;
+    if (result === "slot_taken") return { ok: false, error: "slot_taken" };
+    return { ok: true };
+  } catch (e) {
+    return maskError(e, { action: "admin-add", kingshotId: auth.me.kingshot_id });
+  }
+}
+
 /** !!! TEST_MODE 전용 — admin 만 호출. _test 참가자 전체 + state 초기화. !!!
  *  운영(isTest=false) 호출은 reject. 다음 get-state 가 lazy bootstrap 으로 admin 6명 다시 INSERT. */
 async function adminResetTest(token: unknown, isTest: boolean) {
@@ -362,6 +387,9 @@ Deno.serve(async (req: Request) => {
         break;
       case "admin-start":
         result = await adminStart(token, isTest);
+        break;
+      case "admin-add":
+        result = await adminAdd(token, target_kingshot_id, slot_idx, isTest);
         break;
       case "admin-reset-test":
         result = await adminResetTest(token, isTest);

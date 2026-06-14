@@ -98,6 +98,7 @@ let pendingSlotIdx: number | null = null; // confirm 다이얼로그 대기 중 
 // 값 보존 + renderGrid 후 슬롯 카드에 .is-swap-source 재마킹 → polling 무관 selection 유지.
 let swapSourceSlotIdx: number | null = null;
 let pendingSwapTargetSlotIdx: number | null = null;
+let pendingAddSlotIdx: number | null = null; // [추가] 다이얼로그 대기 중 slot idx (admin 마감 후 등록)
 let pollingTimer: number | null = null;
 let elapsedTimer: number | null = null;
 let countdownTimer: number | null = null;
@@ -423,10 +424,13 @@ function onGridClick(e: Event): void {
   const slotIdx = Number(card.dataset.slotIdx);
   if (Number.isNaN(slotIdx)) return;
 
-  // 마감 가드 — RPC 도 'finalized' 로 reject 하지만, UI 차원에서 confirm 다이얼로그 자체가
-  // 안 뜨도록 차단 (swap 흐름의 첫 번째 클릭 후 마감된 경우 두 번째 클릭에서 dialog 가 떴던 회귀 막음).
+  // 마감 후 — admin 은 빈 슬롯 클릭 시 [추가] 다이얼로그 (순위권 밖 인원 직접 등록).
+  // 일반 사용자 / 점유 슬롯은 그대로 차단.
   if (buffState?.finalized_at) {
     clearSwapSelection();
+    if (me?.is_admin && !card.classList.contains('is-occupied')) {
+      openAddDialog(slotIdx);
+    }
     return;
   }
 
@@ -658,6 +662,60 @@ async function onSwapConfirm(): Promise<void> {
   await pollState();
 }
 
+// ===== admin: 마감 후 빈 슬롯에 사용자 직접 추가 =====
+/** 빈 슬롯 클릭 → ID 입력 다이얼로그 오픈. admin + 마감 상태에서만 onGridClick 이 호출. */
+function openAddDialog(slotIdx: number): void {
+  pendingAddSlotIdx = slotIdx;
+  $('sk-buff-add-time').textContent = formatSlotTime(slotIdx, tzMode);
+  const input = $<HTMLInputElement>('sk-buff-add-input');
+  input.value = '';
+  setAddStatus('');
+  const dlg = $<HTMLDialogElement>('sk-buff-add-dialog');
+  if (!dlg.open) dlg.showModal();
+  setTimeout(() => input.focus(), 50);
+}
+
+function setAddStatus(msg: string, kind: 'err' | '' = ''): void {
+  const el = $('sk-buff-add-status');
+  el.textContent = msg;
+  el.className = 'sk-status' + (kind ? ' sk-status-' + kind : '');
+}
+
+async function onAddConfirm(): Promise<void> {
+  if (pendingAddSlotIdx === null) return;
+  const input = $<HTMLInputElement>('sk-buff-add-input');
+  const id = input.value.trim();
+  if (!/^\d{4,15}$/.test(id)) {
+    setAddStatus(t('survey.kvkBuff.add.invalidId'), 'err');
+    return;
+  }
+  const okBtn = $<HTMLButtonElement>('sk-buff-add-ok');
+  if (okBtn.disabled) return;
+  okBtn.disabled = true;
+  setAddStatus('');
+  try {
+    const res = await callFn<{ ok: boolean; error?: string }>({
+      action: 'admin-add',
+      token,
+      target_kingshot_id: id,
+      slot_idx: pendingAddSlotIdx,
+    });
+    if (!res.ok) {
+      // 다이얼로그 내부 status 로 안내 (native dialog top layer — 외부 alert 가려짐).
+      // not_in_survey → "설문 제출 인원만 등록 가능" 안내가 핵심 UX.
+      const key = 'survey.kvkBuff.error.' + (res.error ?? 'unexpected_error');
+      const translated = t(key);
+      setAddStatus(translated === key ? t('survey.kvkBuff.error.unexpected_error') : translated, 'err');
+      return;
+    }
+    pendingAddSlotIdx = null;
+    $<HTMLDialogElement>('sk-buff-add-dialog').close();
+    await pollState();
+  } finally {
+    okBtn.disabled = false;
+  }
+}
+
 // ===== 복사 =====
 function onCopyClick(): void {
   const items: { time: string; name: string }[] = [];
@@ -765,6 +823,19 @@ function init(): void {
     $<HTMLDialogElement>('sk-buff-swap-dialog').close();
   });
   $('sk-buff-swap-ok').addEventListener('click', onSwapConfirm);
+
+  // [추가] (admin) — 마감 후 빈 슬롯 등록 다이얼로그
+  $('sk-buff-add-close').addEventListener('click', () => $<HTMLDialogElement>('sk-buff-add-dialog').close());
+  $('sk-buff-add-cancel').addEventListener('click', () => $<HTMLDialogElement>('sk-buff-add-dialog').close());
+  $('sk-buff-add-ok').addEventListener('click', onAddConfirm);
+  $('sk-buff-add-input').addEventListener('keydown', (e) => {
+    if ((e as KeyboardEvent).key === 'Enter') { e.preventDefault(); void onAddConfirm(); }
+  });
+  $('sk-buff-add-dialog').addEventListener('click', (e) => {
+    const dlg = e.currentTarget as HTMLDialogElement;
+    if (e.target === dlg) dlg.close();
+  });
+  $('sk-buff-add-dialog').addEventListener('close', () => { pendingAddSlotIdx = null; });
 
   // !!! TEST_MODE — admin 전용 [재시작] 버튼: _test 참가자 + state 일괄 reset.
   // 운영 호출 시 서버가 'test_mode_only' 로 거부 → 안전.
