@@ -785,6 +785,7 @@ export const en: Translations = {
         errors: {
           invalidAmount: 'Amounts must be non-negative integers',
           invalidPreferredTime: 'Invalid preferred time format',
+          pastDeadline: 'The survey has closed — registration and edits are no longer allowed.',
         },
       },
       list: {

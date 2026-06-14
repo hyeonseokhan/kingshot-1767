@@ -26,7 +26,7 @@ import {
   stopBuffPolling,
   setBuffTestMode,
 } from './survey-buff';
-import { appConfirm } from '@/lib/shared/dialog';
+import { appAlert, appConfirm } from '@/lib/shared/dialog';
 import { SURVEY_DEADLINE_ISO } from '@/lib/kvk-survey/survey-deadline';
 
 const FN_URL = SUPABASE_URL + '/functions/v1/kvk-survey';
@@ -349,15 +349,21 @@ function syncHeaderLogoutBtn(): void {
  *
  *  각 버튼은 자기 클릭 핸들러 (onClickRegister / onClickBuffBooking / onClickTest) 한 개씩만 가짐.
  *  → if 분기로 한 핸들러 안에서 시점에 따라 동작 swap 하던 구조 제거 → 유지보수 용이. */
+/** 설문 등록 마감을 지났는지. 버튼 토글 + 폼 진입 가드 공용.
+ *  서버 (kvk-survey) 도 동일 DEADLINE 으로 register/update/set-evidence 차단 — 클라는 UX 가드. */
+function isPastDeadline(): boolean {
+  return Date.now() >= new Date(SURVEY_DEADLINE_ISO).getTime();
+}
+
 function syncListButtons(): void {
-  const isPastDeadline = Date.now() >= new Date(SURVEY_DEADLINE_ISO).getTime();
+  const past = isPastDeadline();
   const isAdmin = getAuth()?.record.is_admin === true;
   const setHidden = (id: string, hidden: boolean) => {
     const el = document.getElementById(id);
     if (el) (el as HTMLButtonElement).hidden = hidden;
   };
-  setHidden('sk-list-add', isPastDeadline);
-  setHidden('sk-list-buff', !isPastDeadline);
+  setHidden('sk-list-add', past);
+  setHidden('sk-list-buff', !past);
   setHidden('sk-list-test', !isAdmin);
 }
 
@@ -539,6 +545,13 @@ async function onConfirmPin(): Promise<void> {
 
 function enterFormMode(): void {
   if (!session) return;
+  // 마감 가드 — 폼 진입의 단일 관문. 숨김 버튼 우회·login 후 자동진입 등 모든 경로 차단.
+  // 서버(kvk-survey) 도 register/update 를 past_deadline 로 거부하므로 이건 UX 방어선.
+  if (isPastDeadline()) {
+    closeAuthDialog();
+    void appAlert(t('survey.kvk.form.errors.pastDeadline'));
+    return;
+  }
   closeAuthDialog();
   const dlg = $<HTMLDialogElement>('sk-form-dialog');
   fillPlayerCard('sk-form', session.player);
@@ -1288,6 +1301,8 @@ function mapError(code: string | null | undefined): string {
       return t('survey.kvk.auth.errors.alreadyRegistered');
     case 'city_level_too_low':
       return t('survey.kvk.auth.errors.cityLevelTooLow');
+    case 'past_deadline':
+      return t('survey.kvk.form.errors.pastDeadline');
     case 'invalid_amount':
       return t('survey.kvk.form.errors.invalidAmount');
     case 'invalid_preferred_time':

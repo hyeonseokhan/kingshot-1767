@@ -784,6 +784,7 @@ export const ko = {
         errors: {
           invalidAmount: '수량은 0 이상의 정수여야 합니다',
           invalidPreferredTime: '선호 시간 형식이 올바르지 않습니다',
+          pastDeadline: '설문이 마감되어 더 이상 등록·수정할 수 없습니다.',
         },
       },
       list: {

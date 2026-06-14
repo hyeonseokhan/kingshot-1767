@@ -124,6 +124,22 @@ function randomSaltHex(bytes = 16): string {
   return Array.from(arr).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+/**
+ * 설문 등록 마감 시각 — 클라 (src/lib/kvk-survey/survey-deadline.ts) 및
+ * kvk-buff/index.ts:DEADLINE_ISO 와 수동 동기화 필수.
+ *
+ * 마감 후 차단 대상: register / update / set-evidence (가속권 데이터·인증샷 변경 일체).
+ * 차단 제외: lookup / login / verify-token / logout / list / delete (조회·인증·삭제는 마감 후도 허용).
+ *
+ * 변경 절차: 세 곳(클라/buff/survey) DEADLINE 동시 변경 + i18n 마감 안내문 갱신 + 두 함수 재배포.
+ */
+const DEADLINE_ISO = "2026-06-14T00:00:00Z";
+
+/** 현재 시각이 마감을 지났으면 true. */
+function isPastDeadline(): boolean {
+  return Date.now() >= new Date(DEADLINE_ISO).getTime();
+}
+
 function isValidPin(pin: unknown): pin is string {
   return typeof pin === "string" && /^\d{4}$/.test(pin);
 }
@@ -283,6 +299,7 @@ async function register(
   general: unknown,
   meta: { ip: string | null; country: string | null; platform: string | null },
 ) {
+  if (isPastDeadline()) return { ok: false, error: "past_deadline" };
   if (!isValidKingshotId(kingshotId)) return { ok: false, error: "invalid_id" };
   if (!isValidPin(pin)) return { ok: false, error: "invalid_pin" };
   if (!isNonNegInt(training) || !isNonNegInt(construction) || !isNonNegInt(general)) {
@@ -481,6 +498,7 @@ async function updateRow(
   general: unknown,
   meta: { ip: string | null; country: string | null; platform: string | null },
 ) {
+  if (isPastDeadline()) return { ok: false, error: "past_deadline" };
   if (!isNonNegInt(training) || !isNonNegInt(construction) || !isNonNegInt(general)) {
     return { ok: false, error: "invalid_amount" };
   }
@@ -532,6 +550,7 @@ async function deleteRow(opts: { token?: unknown; kingshotId?: unknown; pin?: un
  * 본 함수는 DB 메타데이터만 동기화.
  */
 async function setEvidence(opts: { token?: unknown }, hasEvidence: unknown) {
+  if (isPastDeadline()) return { ok: false, error: "past_deadline" };
   if (typeof hasEvidence !== "boolean") return { ok: false, error: "invalid_payload" };
   const auth = await authenticate(opts);
   if (!auth.ok) return auth;
