@@ -310,11 +310,22 @@
 .sk-buff-current.is-finalized .sk-buff-current-completed { display: none; }
 .sk-buff-current.is-finalized .sk-buff-current-finalized { display: block; }
 
-/* 마감 후 grid 전체 클릭 비활성 + 시각적 표시 — admin 도 변경 불가 (RPC 가 차단하지만 UI 도 명확).
+/* 마감 후 grid 전체 클릭 비활성 + 시각적 표시 — 일반 사용자는 변경 불가 (RPC 도 차단).
    slot 까지 셀렉터 포함 — 일부 브라우저에서 부모 pointer-events: none 이 자식 hover 차단 안 하는 케이스 방어. */
 .sk-buff-page.is-finalized .sk-buff-grid,
 .sk-buff-page.is-finalized .sk-buff-slot { pointer-events: none; }
 .sk-buff-page.is-finalized .sk-buff-grid { opacity: 0.7; }
+
+/* 단, admin 은 마감 후에도 빈 슬롯 클릭 허용 — 순위권 밖 인원 직접 추가 ([추가] 다이얼로그).
+   315~316 의 pointer-events:none 을 admin + 빈 슬롯에 한해 되살림 (grid 부모도 함께). */
+.sk-buff-page.is-admin.is-finalized .sk-buff-grid { pointer-events: auto; }
+.sk-buff-page.is-admin.is-finalized .sk-buff-slot:not(.is-occupied) {
+  pointer-events: auto;
+  cursor: pointer;
+}
+.sk-buff-page.is-admin.is-finalized .sk-buff-slot:not(.is-occupied):hover {
+  border-color: var(--brand-accent, #6366f1);
+}
 
 /* ===== Toolbar — 시간대 토글 / 남은 자리 / 복사 ===== */
 .sk-buff-tz {
