@@ -561,6 +561,35 @@
   cursor: not-allowed;
 }
 
+/* ===== [추가] 다이얼로그 — admin 이 마감 후 빈 슬롯에 ID 직접 등록 =====
+   confirm-card(헤더 없는 단순 카드) 에 헤더+입력칸을 얹어 정렬이 깨지던 것 보정.
+   카드 좌우 padding(20px) 을 헤더에서 음수마진으로 상쇄해 구분선을 카드 폭 전체로 펴고,
+   입력칸/상태문구 여백을 정리. #id 로 타겟 — 다른 confirm 다이얼로그엔 영향 없음. */
+#sk-buff-add-dialog .sk-buff-confirm-card {
+  width: 320px;
+  max-width: 92vw;
+  padding: 0 20px 16px;          /* 상단 padding 은 헤더가 담당 */
+}
+#sk-buff-add-dialog .sk-buff-replace-head {
+  margin: 0 -20px 14px;          /* 카드 좌우 padding 상쇄 → 구분선 full-width */
+  padding: 12px 16px;
+}
+#sk-buff-add-dialog .sk-buff-confirm-body {
+  margin: 0 0 10px;
+}
+#sk-buff-add-input {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0 0 8px;
+}
+#sk-buff-add-status {
+  margin: 0 0 12px;
+  min-height: 1.2em;             /* 에러 문구 등장 시 레이아웃 점프 방지 */
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+#sk-buff-add-status:empty { margin: 0 0 4px; }
+
 /* ===== [변경] 다이얼로그 — admin 이 다음 차례 사용자 선택 ===== */
 .sk-buff-replace {
   border: none;
