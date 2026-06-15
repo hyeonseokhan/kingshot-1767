@@ -15,7 +15,7 @@ if (!url || !anonKey) {
 const isServer = typeof window === 'undefined';
 const realtimeOptions = isServer
   ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    { transport: (await import('ws')).default as any }
+    { transport: (await import(/* @vite-ignore */ 'ws')).default as any }
   : undefined;
 
 export const supabase: SupabaseClient = createClient(url, anonKey, {

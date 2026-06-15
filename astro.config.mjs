@@ -12,6 +12,11 @@ export default defineConfig({
     '/': '/survey/',
   },
   vite: {
+    build: {
+      rollupOptions: {
+        external: ['ws'],
+      },
+    },
     plugins: [
       tailwindcss(),
       obfuscator({
