@@ -1,0 +1,598 @@
+---
+// 전략 — 포지션별 담당자 배정 (인증 게이트 + 관리자 편집 + D&D).
+//
+// 데이터 흐름 (클라이언트 렌더):
+//   1. 페이지 로드 → localStorage('pnx-sk-auth-v1') 확인 (통합 인증 토큰)
+//   2. 미인증 → 로그인 게이트 표시 / 인증됨 → strategy EF verify-access 호출
+//   3. 접근 불가(city_level < 26 등) → 오류 메시지
+//   4. 접근 가능 → strategy_assignments 테이블 조회 (anon read) + 렌더
+//   5. strategy_admins 에 등록된 관리자 → 편집 UI + D&D 활성화
+//
+// 편집 (관리자 전용):
+//   - 집결장/집결원 슬롯 클릭 → 편집 다이얼로그 → lookup-player → upsert-position / clear-position
+//   - 슬롯 드래그 → 다른 슬롯에 드롭 → swap-positions
+
+import StrategyLayout from '@/layouts/StrategyLayout.astro';
+import '@/styles/strategy.css';
+---
+
+<StrategyLayout
+  title="공격 전략 — 1767 서버"
+  description="KVK 설문 참여자 기반 포지션별 공격 담당 전략 안내"
+>
+  <!-- 인증 게이트 -->
+  <div id="st-gate" class="st-gate">
+    <div class="st-gate-card">
+      <div class="st-gate-icon">🔒</div>
+      <h2 class="st-gate-title">전략 페이지 접근 제한</h2>
+      <p class="st-gate-desc" id="st-gate-desc">
+        1767 멤버이고 센터 레벨 26 이상인 경우에만 열람 가능합니다.
+      </p>
+      <button class="st-gate-btn" id="st-gate-btn" type="button">로그인</button>
+      <div class="st-gate-status" id="st-gate-status" hidden></div>
+    </div>
+  </div>
+
+  <!-- 메인 콘텐츠 (인증 후 노출) -->
+  <div id="st-main" hidden>
+    <section class="st-hero">
+      <p class="st-hero-eyebrow" data-i18n="nav.strategy">전략</p>
+      <h1 class="st-hero-title">공격 전략 배정</h1>
+      <p class="st-hero-desc">포지션별 담당자 목록입니다. 집결장/집결원을 확인하세요.</p>
+    </section>
+    <div id="st-grid" class="st-grid">
+      <!-- JS 가 렌더 -->
+    </div>
+    <div id="st-loading" class="st-loading">
+      <span class="st-loading-spinner"></span>
+      <span>불러오는 중…</span>
+    </div>
+  </div>
+
+  <!-- 편집 다이얼로그 (관리자 전용) -->
+  <dialog id="st-pos-dialog" class="st-pos-dialog">
+    <div class="st-pos-dialog-card">
+      <header class="st-pos-dialog-head">
+        <strong id="st-pos-dialog-title">포지션 편집</strong>
+        <button type="button" class="st-pos-dialog-close" id="st-pos-dialog-close">&times;</button>
+      </header>
+      <div class="st-pos-dialog-body">
+        <!-- Phase 1: ID 입력 -->
+        <div id="st-pos-phase-id" class="st-pos-phase">
+          <label class="st-pos-label">킹샷 ID</label>
+          <div class="st-pos-input-row">
+            <input
+              id="st-pos-id-input"
+              type="text"
+              inputmode="numeric"
+              autocomplete="off"
+              placeholder="예: 270680423"
+            />
+            <button type="button" class="st-pos-btn-primary" id="st-pos-lookup-btn">조회</button>
+          </div>
+          <div class="st-pos-status" id="st-pos-id-status"></div>
+        </div>
+        <!-- Phase 2: 미리보기 + 저장 -->
+        <div id="st-pos-phase-confirm" class="st-pos-phase" hidden>
+          <div class="st-pos-preview" id="st-pos-preview">
+            <div class="st-pos-preview-avatar" id="st-pos-preview-avatar"></div>
+            <div class="st-pos-preview-info">
+              <div class="st-pos-preview-name" id="st-pos-preview-name">-</div>
+              <div class="st-pos-preview-tc" id="st-pos-preview-tc"></div>
+            </div>
+          </div>
+          <div class="st-pos-status" id="st-pos-confirm-status"></div>
+          <div class="st-pos-actions">
+            <button type="button" class="st-pos-btn-danger" id="st-pos-clear-btn">포지션 비우기</button>
+            <button type="button" class="st-pos-btn-secondary" id="st-pos-back-btn">뒤로</button>
+            <button type="button" class="st-pos-btn-primary" id="st-pos-save-btn">저장</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </dialog>
+</StrategyLayout>
+
+<script>
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from '@/lib/shared/supabase';
+
+// ── 상수 ──────────────────────────────────────────────────────
+const AUTH_KEY     = 'pnx-sk-auth-v1';
+const STRATEGY_FN  = SUPABASE_URL + '/functions/v1/strategy';
+const DB_BASE      = SUPABASE_URL + '/rest/v1';
+
+const GROUP_META: Record<string, { label: string; labelEn: string }> = {
+  'pre-attack':  { label: '캐슬 선 공격',  labelEn: 'Pre-Attack' },
+  'post-attack': { label: '캐슬 후 공격', labelEn: 'Post-Attack' },
+  'counter':     { label: '카운터',        labelEn: 'Counter' },
+};
+const GROUP_ORDER = ['pre-attack', 'post-attack', 'counter'];
+
+// ── 타입 ──────────────────────────────────────────────────────
+interface AuthRecord {
+  kingshot_id: string;
+  nickname: string;
+  avatar_url?: string | null;
+  is_admin?: boolean;
+}
+
+interface Assignment {
+  id: number;
+  group_id: string;
+  is_leader: boolean;
+  display_order: number;
+  kingshot_id: string | null;
+  nickname: string | null;
+  avatar_url: string | null;
+  city_level: number | null;
+}
+
+// ── 상태 ──────────────────────────────────────────────────────
+let authRecord: AuthRecord | null = null;
+let authToken:  string | null     = null;
+let isAdmin    = false;
+let assignments: Assignment[] = [];
+let editingId: number | null  = null;
+let pendingLookup: { nickname: string; avatar_url: string | null; city_level: number | null } | null = null;
+let dragSourceId: number | null = null;
+
+// ── auth 헬퍼 ──────────────────────────────────────────────────
+function readAuth(): { token: string; record: AuthRecord } | null {
+  try {
+    const raw = localStorage.getItem(AUTH_KEY);
+    if (!raw) return null;
+    const obj = JSON.parse(raw);
+    if (!obj?.token || !obj?.record?.kingshot_id) return null;
+    return { token: obj.token as string, record: obj.record as AuthRecord };
+  } catch { return null; }
+}
+
+// ── EF 호출 ───────────────────────────────────────────────────
+async function callFn(body: Record<string, unknown>): Promise<any> {
+  const res = await fetch(STRATEGY_FN, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: 'Bearer ' + SUPABASE_ANON_KEY,
+    },
+    body: JSON.stringify(body),
+  });
+  return res.json();
+}
+
+// ── Supabase anon 직접 조회 ────────────────────────────────────
+async function fetchAssignments(): Promise<Assignment[]> {
+  const res = await fetch(
+    `${DB_BASE}/strategy_assignments?select=id,group_id,is_leader,display_order,kingshot_id,nickname,avatar_url,city_level&order=group_id.asc,is_leader.desc,display_order.asc`,
+    { headers: { apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + SUPABASE_ANON_KEY } },
+  );
+  if (!res.ok) return [];
+  return res.json();
+}
+
+async function checkAdmin(kingshotId: string): Promise<boolean> {
+  const res = await fetch(
+    `${DB_BASE}/strategy_admins?kingshot_id=eq.${encodeURIComponent(kingshotId)}&select=kingshot_id`,
+    { headers: { apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + SUPABASE_ANON_KEY, Accept: 'application/vnd.pgrst.object+json' } },
+  );
+  return res.status === 200;
+}
+
+// ── Gate UI ───────────────────────────────────────────────────
+const gate       = document.getElementById('st-gate')!;
+const gateBtn    = document.getElementById('st-gate-btn')!;
+const gateStatus = document.getElementById('st-gate-status')!;
+const mainEl     = document.getElementById('st-main')!;
+const loadingEl  = document.getElementById('st-loading')!;
+const gridEl     = document.getElementById('st-grid')!;
+
+function showGate(msg?: string) {
+  gate.hidden = false;
+  mainEl.hidden = true;
+  if (msg) {
+    gateStatus.textContent = msg;
+    gateStatus.hidden = false;
+  } else {
+    gateStatus.hidden = true;
+  }
+}
+
+function showMain() {
+  gate.hidden = true;
+  mainEl.hidden = false;
+}
+
+function setLoading(on: boolean) {
+  loadingEl.hidden = !on;
+  gridEl.hidden    = on;
+}
+
+// ── 아바타 HTML ───────────────────────────────────────────────
+function initial(nickname: string | null): string {
+  return (nickname?.[0] ?? '?').toUpperCase();
+}
+
+function avatarHtml(avatarUrl: string | null, nick: string | null, size: 'lg' | 'sm'): string {
+  const cls = size === 'lg' ? 'st-rep-avatar' : 'st-member-avatar';
+  const ini = initial(nick);
+  if (avatarUrl) {
+    return `<div class="${cls}"><img src="${avatarUrl}" alt="${nick ?? ''}" width="${size === 'lg' ? 84 : 38}" height="${size === 'lg' ? 84 : 38}" loading="lazy" onerror="this.parentElement.textContent='${ini}';this.remove()" /></div>`;
+  }
+  return `<div class="${cls}">${ini}</div>`;
+}
+
+// ── 렌더 ──────────────────────────────────────────────────────
+function renderGrid() {
+  const grouped: Record<string, { leader: Assignment | null; members: Assignment[] }> = {};
+  for (const g of GROUP_ORDER) grouped[g] = { leader: null, members: [] };
+
+  for (const a of assignments) {
+    if (a.is_leader) grouped[a.group_id].leader = a;
+    else             grouped[a.group_id].members.push(a);
+  }
+
+  gridEl.innerHTML = GROUP_ORDER.map((gid) => {
+    const { label } = GROUP_META[gid];
+    const { leader, members } = grouped[gid];
+
+    const adminAttr = isAdmin ? `draggable="true"` : '';
+    const editCls   = isAdmin ? ' is-editable' : '';
+
+    // 집결장 슬롯
+    const leaderHtml = leader ? (() => {
+      const hasData = !!leader.kingshot_id;
+      const editBtn = isAdmin
+        ? `<button type="button" class="st-edit-btn" data-id="${leader.id}" aria-label="포지션 편집">✏️</button>`
+        : '';
+      return `
+        <div class="st-hero-block${editCls}" data-assignment-id="${leader.id}" ${adminAttr}>
+          ${isAdmin ? `<div class="st-drag-handle" aria-hidden="true">⠿</div>` : ''}
+          ${editBtn}
+          ${hasData
+            ? `${avatarHtml(leader.avatar_url, leader.nickname, 'lg')}
+               <div class="st-rep-name">${leader.nickname ?? ''}</div>
+               ${leader.city_level ? `<div class="st-rep-tc">TC ${leader.city_level}</div>` : ''}`
+            : `<div class="st-rep-empty">${isAdmin ? '<span class="st-empty-hint">+ 집결장 배정</span>' : '배정 없음'}</div>`
+          }
+        </div>`;
+    })() : `<div class="st-hero-block"><div class="st-rep-empty">슬롯 없음</div></div>`;
+
+    // 집결원 목록
+    const membersHtml = members.length === 0
+      ? `<div class="st-members-empty">멤버가 없습니다</div>`
+      : members.map((m) => {
+          const hasData = !!m.kingshot_id;
+          const editBtn = isAdmin
+            ? `<button type="button" class="st-member-edit-btn" data-id="${m.id}" aria-label="편집">✏️</button>`
+            : '';
+          return `
+            <div class="st-member${editCls}" data-assignment-id="${m.id}" ${adminAttr}>
+              ${isAdmin ? `<div class="st-drag-handle" aria-hidden="true">⠿</div>` : ''}
+              ${hasData
+                ? `${avatarHtml(m.avatar_url, m.nickname, 'sm')}
+                   <span class="st-member-name">${m.nickname ?? ''}</span>
+                   ${m.city_level ? `<span class="st-member-tc">TC ${m.city_level}</span>` : ''}`
+                : `<span class="st-member-name st-member-empty">${isAdmin ? '+ 집결원 배정' : '(빈 슬롯)'}</span>`
+              }
+              ${editBtn}
+            </div>`;
+        }).join('');
+
+    return `
+      <div class="st-col">
+        <h2 class="st-col-title">${label}</h2>
+        <div class="st-card">
+          ${leaderHtml}
+          <div class="st-members">${membersHtml}</div>
+        </div>
+      </div>`;
+  }).join('');
+
+  if (isAdmin) setupEditHandlers();
+  if (isAdmin) setupDragDrop();
+}
+
+// ── 편집 다이얼로그 ──────────────────────────────────────────
+const posDialog     = document.getElementById('st-pos-dialog')     as HTMLDialogElement;
+const posDialogTitle = document.getElementById('st-pos-dialog-title')!;
+const posDialogClose = document.getElementById('st-pos-dialog-close')!;
+const posPhaseId    = document.getElementById('st-pos-phase-id')!;
+const posPhaseConf  = document.getElementById('st-pos-phase-confirm')!;
+const posIdInput    = document.getElementById('st-pos-id-input')    as HTMLInputElement;
+const posLookupBtn  = document.getElementById('st-pos-lookup-btn')  as HTMLButtonElement;
+const posIdStatus   = document.getElementById('st-pos-id-status')!;
+const posPreviewAv  = document.getElementById('st-pos-preview-avatar')!;
+const posPreviewNm  = document.getElementById('st-pos-preview-name')!;
+const posPreviewTc  = document.getElementById('st-pos-preview-tc')!;
+const posConfStatus = document.getElementById('st-pos-confirm-status')!;
+const posClearBtn   = document.getElementById('st-pos-clear-btn')   as HTMLButtonElement;
+const posBackBtn    = document.getElementById('st-pos-back-btn')    as HTMLButtonElement;
+const posSaveBtn    = document.getElementById('st-pos-save-btn')    as HTMLButtonElement;
+
+function openEditDialog(assignmentId: number) {
+  const a = assignments.find((x) => x.id === assignmentId);
+  if (!a) return;
+  editingId = assignmentId;
+  pendingLookup = null;
+
+  const isLeader = a.is_leader;
+  posDialogTitle.textContent = isLeader ? '집결장 편집' : '집결원 편집';
+
+  // reset
+  posIdInput.value = a.kingshot_id ?? '';
+  posIdStatus.textContent = '';
+  posConfStatus.textContent = '';
+  posPhaseId.hidden   = false;
+  posPhaseConf.hidden = true;
+
+  posDialog.showModal();
+  setTimeout(() => posIdInput.focus(), 50);
+}
+
+function closeEditDialog() {
+  if (posDialog.open) posDialog.close();
+  editingId     = null;
+  pendingLookup = null;
+}
+
+function setStatus(el: HTMLElement, msg: string, tone: '' | 'err' | 'ok' = '') {
+  el.textContent = msg;
+  el.className = 'st-pos-status' + (tone ? ' is-' + tone : '');
+}
+
+async function onLookup() {
+  const pid = posIdInput.value.trim();
+  if (!/^\d{4,20}$/.test(pid)) {
+    setStatus(posIdStatus, '4~20자리 숫자로 입력해 주세요.', 'err');
+    return;
+  }
+  posLookupBtn.disabled = true;
+  setStatus(posIdStatus, '조회 중…');
+  try {
+    const res = await callFn({ action: 'lookup-player', player_id: pid });
+    if (!res.ok) {
+      const msgs: Record<string, string> = {
+        player_not_found: '해당 킹샷 ID 를 찾을 수 없습니다.',
+        invalid_player_id: '유효하지 않은 킹샷 ID 입니다.',
+      };
+      setStatus(posIdStatus, msgs[res.error] ?? '조회 실패. 다시 시도해 주세요.', 'err');
+      return;
+    }
+    pendingLookup = { nickname: res.nickname, avatar_url: res.avatar_url, city_level: res.city_level };
+    const ini = initial(res.nickname);
+    if (res.avatar_url) {
+      posPreviewAv.innerHTML = `<img src="${res.avatar_url}" width="48" height="48" onerror="this.parentElement.textContent='${ini}'" />`;
+    } else {
+      posPreviewAv.textContent = ini;
+    }
+    posPreviewNm.textContent = res.nickname;
+    posPreviewTc.textContent = res.city_level ? `TC ${res.city_level}` : '';
+    setStatus(posIdStatus, '');
+    posPhaseId.hidden   = true;
+    posPhaseConf.hidden = false;
+  } finally {
+    posLookupBtn.disabled = false;
+  }
+}
+
+async function onSave() {
+  if (editingId === null || !pendingLookup || !authToken) return;
+  posSaveBtn.disabled = true;
+  setStatus(posConfStatus, '저장 중…');
+  try {
+    const pid = posIdInput.value.trim();
+    const res = await callFn({
+      action:      'upsert-position',
+      token:       authToken,
+      id:          editingId,
+      kingshot_id: pid,
+      nickname:    pendingLookup.nickname,
+      avatar_url:  pendingLookup.avatar_url,
+      city_level:  pendingLookup.city_level,
+    });
+    if (!res.ok) {
+      const msgs: Record<string, string> = {
+        not_admin:     '관리자 권한이 없습니다.',
+        invalid_token: '인증이 만료되었습니다. 다시 로그인해 주세요.',
+      };
+      setStatus(posConfStatus, msgs[res.error] ?? '저장 실패.', 'err');
+      return;
+    }
+    closeEditDialog();
+    await reloadData();
+  } finally {
+    posSaveBtn.disabled = false;
+  }
+}
+
+async function onClear() {
+  if (editingId === null || !authToken) return;
+  posClearBtn.disabled = true;
+  setStatus(posConfStatus, '처리 중…');
+  try {
+    const res = await callFn({
+      action: 'clear-position',
+      token:  authToken,
+      id:     editingId,
+    });
+    if (!res.ok) {
+      setStatus(posConfStatus, '실패. 다시 시도해 주세요.', 'err');
+      return;
+    }
+    closeEditDialog();
+    await reloadData();
+  } finally {
+    posClearBtn.disabled = false;
+  }
+}
+
+function setupEditHandlers() {
+  document.querySelectorAll<HTMLButtonElement>('.st-edit-btn, .st-member-edit-btn').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = Number(btn.dataset.id);
+      openEditDialog(id);
+    });
+  });
+
+  // 클릭으로도 열리도록 (빈 슬롯 등)
+  document.querySelectorAll<HTMLElement>('[data-assignment-id]').forEach((el) => {
+    el.addEventListener('click', (e) => {
+      // 이미 버튼 클릭으로 열린 경우 중복 방지
+      if ((e.target as HTMLElement).closest('.st-edit-btn, .st-member-edit-btn, .st-drag-handle')) return;
+      openEditDialog(Number(el.dataset.assignmentId));
+    });
+  });
+}
+
+// 다이얼로그 이벤트 바인딩
+posDialogClose.addEventListener('click', closeEditDialog);
+posDialog.addEventListener('click', (e) => { if (e.target === posDialog) closeEditDialog(); });
+posLookupBtn.addEventListener('click', onLookup);
+posIdInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') onLookup(); });
+posBackBtn.addEventListener('click', () => {
+  posPhaseId.hidden   = false;
+  posPhaseConf.hidden = true;
+  setStatus(posConfStatus, '');
+});
+posSaveBtn.addEventListener('click', onSave);
+posClearBtn.addEventListener('click', onClear);
+
+// ── 드래그 & 드롭 ─────────────────────────────────────────────
+function setupDragDrop() {
+  const draggables = document.querySelectorAll<HTMLElement>('[data-assignment-id][draggable="true"]');
+
+  draggables.forEach((el) => {
+    el.addEventListener('dragstart', (e) => {
+      dragSourceId = Number(el.dataset.assignmentId);
+      el.classList.add('is-dragging');
+      e.dataTransfer!.effectAllowed = 'move';
+      e.dataTransfer!.setData('text/plain', String(dragSourceId));
+    });
+
+    el.addEventListener('dragend', () => {
+      el.classList.remove('is-dragging');
+      document.querySelectorAll('.is-drag-over').forEach((t) => t.classList.remove('is-drag-over'));
+    });
+
+    el.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer!.dropEffect = 'move';
+      const targetId = Number(el.dataset.assignmentId);
+      if (dragSourceId !== null && dragSourceId !== targetId) {
+        el.classList.add('is-drag-over');
+      }
+    });
+
+    el.addEventListener('dragleave', () => {
+      el.classList.remove('is-drag-over');
+    });
+
+    el.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      el.classList.remove('is-drag-over');
+      const targetId = Number(el.dataset.assignmentId);
+      if (dragSourceId === null || dragSourceId === targetId) return;
+      if (!authToken) return;
+
+      const res = await callFn({
+        action: 'swap-positions',
+        token:  authToken,
+        id_a:   dragSourceId,
+        id_b:   targetId,
+      });
+
+      dragSourceId = null;
+      if (res.ok) {
+        await reloadData();
+      }
+    });
+  });
+}
+
+// ── 데이터 로드 ───────────────────────────────────────────────
+async function reloadData() {
+  setLoading(true);
+  try {
+    assignments = await fetchAssignments();
+  } catch {
+    assignments = [];
+  } finally {
+    setLoading(false);
+  }
+  renderGrid();
+}
+
+// ── 접근 검증 + 초기화 ────────────────────────────────────────
+async function verifyAndInit() {
+  if (!authRecord || !authToken) {
+    showGate();
+    return;
+  }
+
+  gateStatus.textContent = '접근 권한 확인 중…';
+  gateStatus.hidden = false;
+  gate.hidden = false;
+
+  let res: any;
+  try {
+    res = await callFn({ action: 'verify-access', token: authToken });
+  } catch {
+    showGate('서버 연결에 실패했습니다. 잠시 후 다시 시도해 주세요.');
+    return;
+  }
+
+  if (!res?.ok) {
+    const msgs: Record<string, string> = {
+      not_member:    '1767 서버 KvK 설문 미참여자입니다.',
+      level_too_low: `센터 레벨이 부족합니다. (현재: TC ${res?.city_level ?? '?'} / 필요: TC 26 이상)`,
+      invalid_token: '인증이 만료되었습니다. 다시 로그인해 주세요.',
+    };
+    showGate(msgs[res?.error] ?? '접근 권한 확인 실패. 잠시 후 다시 시도해 주세요.');
+    return;
+  }
+
+  let adminCheck = false;
+  try {
+    adminCheck = await checkAdmin(authRecord.kingshot_id);
+  } catch { /* 관리자 조회 실패해도 뷰어로 계속 */ }
+  isAdmin = adminCheck;
+
+  showMain();
+  await reloadData();
+}
+
+async function init() {
+  const auth = readAuth();
+  authRecord = auth?.record ?? null;
+  authToken  = auth?.token  ?? null;
+
+  if (!authRecord || !authToken) {
+    showGate();
+    return;
+  }
+  await verifyAndInit();
+}
+
+// 로그인 버튼 → 인증 다이얼로그 열기
+gateBtn.addEventListener('click', () => {
+  document.dispatchEvent(new CustomEvent('app-open-auth'));
+});
+
+// 인증 완료 이벤트
+document.addEventListener('app-auth-changed', () => {
+  const auth = readAuth();
+  authRecord = auth?.record ?? null;
+  authToken  = auth?.token  ?? null;
+  if (authRecord && authToken) {
+    verifyAndInit();
+  } else {
+    showGate();
+    isAdmin = false;
+  }
+});
+
+// 페이지 로드
+init();
+</script>

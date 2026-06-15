@@ -36,6 +36,7 @@ export const en: Translations = {
     // 1767 site (KvK survey + Castle Battle voting) — header 2-tab menu
     kvk: 'KvK Survey',
     castle: 'Castle Battle',
+    strategy: 'KvK Strategy',
     // PNX legacy keys (unused in 1767)
     beginner: 'Beginner Guide',
     events: 'Events',
@@ -59,10 +60,18 @@ export const en: Translations = {
   },
   home: {
     title: '1767 Server Hub',
-    subtitle: 'Server-only tools — Castle Battle voting.',
+    subtitle: 'Server-only tools — KvK Survey & Strategy in one place.',
+    kvk: {
+      title: 'KvK Survey',
+      description: 'Speed-up inventory survey + buff scheduling',
+    },
     castle: {
       title: 'Castle Battle',
       description: 'Vote on which rallier will hold each target per round',
+    },
+    strategy: {
+      title: 'KvK Strategy',
+      description: 'Position-based attack assignment guide',
     },
     open: 'Open',
   },

@@ -181,6 +181,10 @@ function isValidPlayerId(id: unknown): id is string {
   return typeof id === "string" && /^\d+$/.test(id) && id.length <= 20;
 }
 
+function isValidToken(token: unknown): token is string {
+  return typeof token === "string" && /^[0-9a-f-]{36}$/.test(token);
+}
+
 const VALID_STATUSES = ["preparing", "voting", "voting_closed", "results_in", "archived"];
 
 // 상태 전이 규칙.
@@ -198,7 +202,7 @@ const STATUS_TRANSITIONS: Record<string, string[]> = {
 
 const KNOWN_ERRORS = new Set([
   "missing_field", "invalid_pin", "invalid_player_id", "invalid_status",
-  "not_registered", "wrong_pin", "not_admin",
+  "not_registered", "wrong_pin", "not_admin", "invalid_token",
   "no_active_round", "round_not_found", "target_not_found",
   "candidate_not_found", "alliance_not_found",
   "invalid_status_transition", "round_not_in_voting",
@@ -227,8 +231,23 @@ interface AuthResult {
   is_admin: boolean;
 }
 
-/** PIN 검증 → 멤버 정보 + is_admin 반환. is_admin 은 members.is_admin 컬럼 사용. */
-async function verifyAuth(playerId: unknown, pin: unknown): Promise<AuthResult> {
+/** 세션 토큰으로 kingshot_users 인증 → AuthResult 반환. 실패 시 throws. */
+async function verifyAuthByToken(token: string): Promise<AuthResult> {
+  const now = new Date().toISOString();
+  const user = await dbSelectOne(
+    `kingshot_users?session_token=eq.${encodeURIComponent(token)}&session_expires_at=gte.${now}&select=kingshot_id,nickname,is_admin`,
+  );
+  if (!user) throw new Error("invalid_token");
+  return { player_id: user.kingshot_id, nickname: user.nickname ?? "", is_admin: !!user.is_admin };
+}
+
+/**
+ * 인증. 토큰 우선, 없으면 PIN (member_credentials) 폴백.
+ * 토큰 패스: kingshot_users 직접 검증.
+ * PIN 패스: member_credentials + members 검증 (기존 로직).
+ */
+async function verifyAuth(playerId: unknown, pin: unknown, token?: unknown): Promise<AuthResult> {
+  if (isValidToken(token)) return verifyAuthByToken(token as string);
   if (!isValidPlayerId(playerId)) throw new Error("invalid_player_id");
   if (!isValidPin(pin)) throw new Error("invalid_pin");
 
@@ -252,9 +271,24 @@ async function verifyAuth(playerId: unknown, pin: unknown): Promise<AuthResult> 
   };
 }
 
-async function requireAdmin(playerId: unknown, _pin: unknown): Promise<AuthResult> {
-  // 관리자 액션은 PIN 재검증 없이 player_id + DB is_admin 컬럼만 확인.
-  // 투표/정보조회 같은 사용자 액션은 verifyAuth(pin 포함)를 그대로 사용.
+/**
+ * 관리자 확인. 토큰 우선, 없으면 player_id (PIN 재검증 없이) 폴백.
+ * 토큰 패스: kingshot_users.is_admin 확인.
+ * player_id 폴백: members.is_admin 확인 (기존 로직).
+ */
+async function requireAdmin(playerId: unknown, _pin: unknown, token?: unknown): Promise<AuthResult> {
+  if (isValidToken(token)) {
+    const result = await verifyAuthByToken(token as string);
+    if (!result.is_admin) {
+      // kingshot_users.is_admin 이 false면 members.is_admin 도 추가 확인 (동기화 지연 대비)
+      const member = await dbSelectOne(
+        `members?kingshot_id=eq.${encodeURIComponent(result.player_id)}&select=is_admin`,
+      );
+      if (!member?.is_admin) throw new Error("not_admin");
+      result.is_admin = true;
+    }
+    return result;
+  }
   if (!isValidPlayerId(playerId)) throw new Error("invalid_player_id");
   const member = await dbSelectOne(
     `members?kingshot_id=eq.${encodeURIComponent(playerId)}&select=kingshot_id,nickname,is_admin`,
@@ -306,11 +340,12 @@ async function getCurrentRound() {
 async function adminCreateRound(
   playerId: unknown,
   pin: unknown,
+  token: unknown,
   title: unknown,
   eventStartsAt: unknown,
   memo: unknown,
 ) {
-  const me = await requireAdmin(playerId, pin);
+  const me = await requireAdmin(playerId, pin, token);
   if (typeof title !== "string" || title.length === 0 || title.length > 200) {
     throw new Error("missing_field");
   }
@@ -349,11 +384,12 @@ async function adminCreateRound(
 async function adminSetupRound(
   playerId: unknown,
   pin: unknown,
+  token: unknown,
   eventStartsAt: unknown,
   memo: unknown,
   targets: unknown,
 ) {
-  const me = await requireAdmin(playerId, pin);
+  const me = await requireAdmin(playerId, pin, token);
   if (typeof eventStartsAt !== "string" || !eventStartsAt) throw new Error("missing_field");
 
   // 회차 번호 자동 생성
@@ -439,10 +475,11 @@ async function lookupPlayer(kingshotId: unknown) {
 async function adminSetRoundStatus(
   playerId: unknown,
   pin: unknown,
+  token: unknown,
   roundId: unknown,
   status: unknown,
 ) {
-  const me = await requireAdmin(playerId, pin);
+  const me = await requireAdmin(playerId, pin, token);
   if (typeof roundId !== "number" || !Number.isInteger(roundId)) {
     throw new Error("missing_field");
   }
@@ -482,10 +519,11 @@ async function adminSetRoundStatus(
 async function adminSetTargetOpen(
   playerId: unknown,
   pin: unknown,
+  token: unknown,
   targetId: unknown,
   isOpen: unknown,
 ) {
-  await requireAdmin(playerId, pin);
+  await requireAdmin(playerId, pin, token);
   if (typeof targetId !== "number" || !Number.isInteger(targetId)) {
     throw new Error("missing_field");
   }
@@ -509,10 +547,11 @@ async function adminSetTargetOpen(
 async function adminAddAlliance(
   playerId: unknown,
   pin: unknown,
+  token: unknown,
   tag: unknown,
   name: unknown,
 ) {
-  await requireAdmin(playerId, pin);
+  await requireAdmin(playerId, pin, token);
   if (typeof tag !== "string" || tag.length === 0 || tag.length > 20) {
     throw new Error("missing_field");
   }
@@ -532,8 +571,8 @@ async function adminAddAlliance(
   }
 }
 
-async function adminListAlliances(playerId: unknown, pin: unknown) {
-  await requireAdmin(playerId, pin);
+async function adminListAlliances(playerId: unknown, pin: unknown, token: unknown) {
+  await requireAdmin(playerId, pin, token);
   const rows = await dbSelect(`cb_alliances?select=*&order=tag.asc`);
   return { ok: true, alliances: rows };
 }
@@ -541,12 +580,13 @@ async function adminListAlliances(playerId: unknown, pin: unknown) {
 async function adminAddCandidate(
   playerId: unknown,
   pin: unknown,
+  token: unknown,
   targetId: unknown,
   allianceId: unknown,
   rallierNickname: unknown,
   candidateKingshotId: unknown,
 ) {
-  await requireAdmin(playerId, pin);
+  await requireAdmin(playerId, pin, token);
   if (typeof targetId !== "number" || !Number.isInteger(targetId)) {
     throw new Error("missing_field");
   }
@@ -598,9 +638,10 @@ async function adminAddCandidate(
 async function adminRemoveCandidate(
   playerId: unknown,
   pin: unknown,
+  token: unknown,
   candidateId: unknown,
 ) {
-  await requireAdmin(playerId, pin);
+  await requireAdmin(playerId, pin, token);
   if (typeof candidateId !== "number" || !Number.isInteger(candidateId)) {
     throw new Error("missing_field");
   }
@@ -622,10 +663,11 @@ async function adminRemoveCandidate(
 async function castVote(
   playerId: unknown,
   pin: unknown,
+  token: unknown,
   targetId: unknown,
   candidateId: unknown,
 ) {
-  const me = await verifyAuth(playerId, pin);
+  const me = await verifyAuth(playerId, pin, token);
   if (typeof targetId !== "number" || !Number.isInteger(targetId)) {
     throw new Error("missing_field");
   }
@@ -666,8 +708,8 @@ async function castVote(
   }
 }
 
-async function myVotes(playerId: unknown, pin: unknown, roundId: unknown) {
-  const me = await verifyAuth(playerId, pin);
+async function myVotes(playerId: unknown, pin: unknown, token: unknown, roundId: unknown) {
+  const me = await verifyAuth(playerId, pin, token);
   if (typeof roundId !== "number" || !Number.isInteger(roundId)) {
     throw new Error("missing_field");
   }
@@ -681,10 +723,11 @@ async function myVotes(playerId: unknown, pin: unknown, roundId: unknown) {
 async function adminEnterResult(
   playerId: unknown,
   pin: unknown,
+  token: unknown,
   targetId: unknown,
   winningCandidateId: unknown,
 ) {
-  const me = await requireAdmin(playerId, pin);
+  const me = await requireAdmin(playerId, pin, token);
   if (typeof targetId !== "number" || !Number.isInteger(targetId)) {
     throw new Error("missing_field");
   }
@@ -732,10 +775,11 @@ async function adminEnterResult(
 async function adminUpdateRound(
   playerId: unknown,
   pin: unknown,
+  token: unknown,
   roundId: unknown,
   eventStartsAt: unknown,
 ): Promise<{ ok: boolean }> {
-  await requireAdmin(playerId, pin);
+  await requireAdmin(playerId, pin, token);
   if (typeof roundId !== "number" || !eventStartsAt) throw new Error("missing_field");
   await dbPatch(`cb_rounds?id=eq.${roundId}`, { event_starts_at: eventStartsAt });
   return { ok: true };
@@ -744,9 +788,10 @@ async function adminUpdateRound(
 async function adminDeleteRound(
   playerId: unknown,
   pin: unknown,
+  token: unknown,
   roundId: unknown,
 ): Promise<{ ok: boolean }> {
-  await requireAdmin(playerId, pin);
+  await requireAdmin(playerId, pin, token);
   if (typeof roundId !== "number") throw new Error("missing_field");
   // 연쇄 삭제: votes → candidates → targets → rounds
   await dbDelete(`cb_votes?round_id=eq.${roundId}`);
@@ -762,17 +807,18 @@ async function adminDeleteRound(
 async function adminResetVotes(
   playerId: unknown,
   pin: unknown,
+  token: unknown,
   roundId: unknown,
 ): Promise<{ ok: boolean }> {
-  await requireAdmin(playerId, pin);
+  await requireAdmin(playerId, pin, token);
   if (typeof roundId !== "number") throw new Error("missing_field");
   await dbDelete(`cb_votes?round_id=eq.${roundId}`);
   await dbPatch(`cb_rounds?id=eq.${roundId}`, { status: "preparing" });
   return { ok: true };
 }
 
-async function adminGetRoundDetail(playerId: unknown, pin: unknown): Promise<{ ok: boolean; round: any; targets: any[] }> {
-  await requireAdmin(playerId, pin);
+async function adminGetRoundDetail(playerId: unknown, pin: unknown, token: unknown): Promise<{ ok: boolean; round: any; targets: any[] }> {
+  await requireAdmin(playerId, pin, token);
   const rounds = await dbSelect(
     "cb_rounds?status=not.eq.archived&order=id.desc&limit=1&select=id,title,event_starts_at,status",
   );
@@ -821,13 +867,14 @@ async function adminGetRoundDetail(playerId: unknown, pin: unknown): Promise<{ o
 async function adminAddCandidateFull(
   playerId: unknown,
   pin: unknown,
+  token: unknown,
   targetId: unknown,
   allianceTag: unknown,
   rallierNickname: unknown,
   kingshotId: unknown,
   profilePhoto: unknown,
 ): Promise<{ ok: boolean; candidate_id: number }> {
-  await requireAdmin(playerId, pin);
+  await requireAdmin(playerId, pin, token);
   if (typeof targetId !== "number" || !allianceTag || !rallierNickname) throw new Error("missing_field");
 
   const target = await dbSelectOne(`cb_targets?id=eq.${targetId}&select=id,round_id`);
@@ -885,10 +932,10 @@ Deno.serve(async (req: Request) => {
 
       // 사용자
       case "cast-vote":
-        result = await castVote(body.player_id, body.pin, body.target_id, body.candidate_id);
+        result = await castVote(body.player_id, body.pin, body.token, body.target_id, body.candidate_id);
         break;
       case "my-votes":
-        result = await myVotes(body.player_id, body.pin, body.round_id);
+        result = await myVotes(body.player_id, body.pin, body.token, body.round_id);
         break;
 
       // 공개 조회 (인증 불필요)
@@ -899,50 +946,50 @@ Deno.serve(async (req: Request) => {
       // 운영자
       case "admin-setup-round":
         result = await adminSetupRound(
-          body.player_id, body.pin, body.event_starts_at, body.memo, body.targets,
+          body.player_id, body.pin, body.token, body.event_starts_at, body.memo, body.targets,
         );
         break;
       case "admin-create-round":
-        result = await adminCreateRound(body.player_id, body.pin, body.title, body.event_starts_at, body.memo);
+        result = await adminCreateRound(body.player_id, body.pin, body.token, body.title, body.event_starts_at, body.memo);
         break;
       case "admin-set-round-status":
-        result = await adminSetRoundStatus(body.player_id, body.pin, body.round_id, body.status);
+        result = await adminSetRoundStatus(body.player_id, body.pin, body.token, body.round_id, body.status);
         break;
       case "admin-set-target-open":
-        result = await adminSetTargetOpen(body.player_id, body.pin, body.target_id, body.is_open);
+        result = await adminSetTargetOpen(body.player_id, body.pin, body.token, body.target_id, body.is_open);
         break;
       case "admin-add-alliance":
-        result = await adminAddAlliance(body.player_id, body.pin, body.tag, body.name);
+        result = await adminAddAlliance(body.player_id, body.pin, body.token, body.tag, body.name);
         break;
       case "admin-list-alliances":
-        result = await adminListAlliances(body.player_id, body.pin);
+        result = await adminListAlliances(body.player_id, body.pin, body.token);
         break;
       case "admin-add-candidate":
         result = await adminAddCandidate(
-          body.player_id, body.pin, body.target_id, body.alliance_id, body.rallier_nickname, body.kingshot_id,
+          body.player_id, body.pin, body.token, body.target_id, body.alliance_id, body.rallier_nickname, body.kingshot_id,
         );
         break;
       case "admin-remove-candidate":
-        result = await adminRemoveCandidate(body.player_id, body.pin, body.candidate_id);
+        result = await adminRemoveCandidate(body.player_id, body.pin, body.token, body.candidate_id);
         break;
       case "admin-enter-result":
-        result = await adminEnterResult(body.player_id, body.pin, body.target_id, body.winning_candidate_id);
+        result = await adminEnterResult(body.player_id, body.pin, body.token, body.target_id, body.winning_candidate_id);
         break;
       case "admin-update-round":
-        result = await adminUpdateRound(body.player_id, body.pin, body.round_id, body.event_starts_at);
+        result = await adminUpdateRound(body.player_id, body.pin, body.token, body.round_id, body.event_starts_at);
         break;
       case "admin-delete-round":
-        result = await adminDeleteRound(body.player_id, body.pin, body.round_id);
+        result = await adminDeleteRound(body.player_id, body.pin, body.token, body.round_id);
         break;
       case "admin-reset-votes":
-        result = await adminResetVotes(body.player_id, body.pin, body.round_id);
+        result = await adminResetVotes(body.player_id, body.pin, body.token, body.round_id);
         break;
       case "admin-get-round-detail":
-        result = await adminGetRoundDetail(body.player_id, body.pin);
+        result = await adminGetRoundDetail(body.player_id, body.pin, body.token);
         break;
       case "admin-add-candidate-full":
         result = await adminAddCandidateFull(
-          body.player_id, body.pin, body.target_id,
+          body.player_id, body.pin, body.token, body.target_id,
           body.alliance_tag, body.rallier_nickname, body.kingshot_id, body.profile_photo,
         );
         break;

@@ -37,6 +37,7 @@ export const ko = {
     // 1767 사이트 (KvK 설문 + 캐슬 전투 투표 통합) — Header 의 2-탭 메뉴
     kvk: 'KvK 설문',
     castle: '캐슬 전투',
+    strategy: 'KvK 전략',
     // PNX 사이트 잔여 키 (1767 에선 미사용 — 이관 시 함께 잔존)
     beginner: '입문 가이드',
     events: '이벤트',
@@ -60,10 +61,18 @@ export const ko = {
   },
   home: {
     title: '1767 서버 허브',
-    subtitle: '서버 전용 도구 모음 — 캐슬 전투 예측 투표.',
+    subtitle: '서버 전용 도구 모음 — KvK 설문과 전략 공지를 한 곳에서.',
+    kvk: {
+      title: 'KvK 설문',
+      description: '가속권 보유 현황 조사 + 버프 예약',
+    },
     castle: {
       title: '캐슬 전투',
       description: '회차별 거점 점령 집결자 예측 투표',
+    },
+    strategy: {
+      title: 'KvK 전략',
+      description: '포지션별 공격 담당 배정 안내',
     },
     open: '들어가기',
   },

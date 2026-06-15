@@ -1,27 +1,5 @@
 ---
-// 캐슬 전투 — 메인 페이지 (실 DB 조회).
-//
-// Phase 1: 조회 전용 — cb_* 테이블에서 회차/거점/후보/표 가져와 카드 렌더.
-// 다이얼로그/투표 액션은 후속 Phase 에서.
-//
-// 데이터 흐름:
-//   1) getActiveRound() — 현재 활성 회차 (status != archived)
-//   2) (선택) AUTH_KEY 에서 내 kingshot_id 확인 → my_vote / is_mine 표시
-//   3) getTargetsWithCandidates(round.id, myId) — 거점 + 후보 + 표 집계
-//   4) Battlefield 컴포넌트 에 전달
-//
-// 회차 미개최 시: 안내 화면.
-
-import CastleBattleLayout from '@/layouts/CastleBattleLayout.astro';
-import RoundHero from '@/components/castle-battle/RoundHero.astro';
-import Battlefield from '@/components/castle-battle/Battlefield.astro';
-import TargetDetailDialog from '@/components/castle-battle/TargetDetailDialog.astro';
-import { getActiveRound, getTargetsWithCandidates } from '@/lib/castle-battle/queries';
-import '@/styles/castle-battle.css';
-
-const round = await getActiveRound();
-const targets = round ? await getTargetsWithCandidates(round.id, null) : [];
-const totalVotes = targets.reduce((s, t) => s + t.total_votes, 0);
+// 캐슬 전투 페이지 — 현재 비활성. 홈으로 리다이렉트.
 ---
 
 <CastleBattleLayout

@@ -1,0 +1,118 @@
+---
+// 1767 서버 허브 — 홈 페이지 (서비스 카탈로그).
+// 제공 서비스: KvK 설문 / KvK 전략
+import BaseLayout from '@/layouts/BaseLayout.astro';
+---
+
+<BaseLayout
+  title="1767 Server Hub"
+  description="1767 서버 전용 도구 모음 — KvK 설문 + KvK 전략"
+  mainClass="home-main"
+>
+  <section class="home-hero">
+    <h1 class="home-title" data-i18n="home.title">1767 서버 허브</h1>
+    <p class="home-subtitle" data-i18n="home.subtitle">
+      서버 전용 도구 모음 — KvK 설문과 전략 공지를 한 곳에서.
+    </p>
+  </section>
+
+  <section class="home-services">
+    <a class="home-service-card" href="/survey/">
+      <div class="home-service-icon">📋</div>
+      <h2 class="home-service-title" data-i18n="home.kvk.title">KvK 설문</h2>
+      <p class="home-service-desc" data-i18n="home.kvk.description">
+        가속권 보유 현황 조사 + 버프 예약
+      </p>
+      <span class="home-service-cta" data-i18n="home.open">들어가기 →</span>
+    </a>
+
+    <a class="home-service-card" href="/strategy/">
+      <div class="home-service-icon">⚔️</div>
+      <h2 class="home-service-title" data-i18n="home.strategy.title">KvK 전략</h2>
+      <p class="home-service-desc" data-i18n="home.strategy.description">
+        포지션별 공격 담당 배정 안내
+      </p>
+      <span class="home-service-cta" data-i18n="home.open">들어가기 →</span>
+    </a>
+  </section>
+</BaseLayout>
+
+<style is:global>
+  .home-main {
+    max-width: 900px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 48px 16px 60px;
+  }
+  .home-hero {
+    text-align: center;
+    margin-bottom: 40px;
+  }
+  .home-title {
+    font-size: 32px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: var(--brand-text);
+    margin: 0 0 8px;
+  }
+  .home-subtitle {
+    font-size: 14px;
+    color: var(--brand-text-dim);
+    line-height: 1.6;
+    margin: 0;
+  }
+
+  .home-services {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px;
+  }
+  .home-service-card {
+    display: flex;
+    flex-direction: column;
+    padding: 24px 20px;
+    background: var(--brand-surface);
+    border: 1px solid var(--brand-border);
+    border-radius: 12px;
+    text-decoration: none;
+    color: var(--brand-text);
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
+    transition: transform 0.18s, border-color 0.18s, box-shadow 0.18s;
+  }
+  .home-service-card:hover {
+    transform: translateY(-3px);
+    border-color: var(--brand-accent-soft);
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
+    text-decoration: none;
+  }
+  .home-service-icon {
+    font-size: 36px;
+    line-height: 1;
+    margin-bottom: 12px;
+  }
+  .home-service-title {
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--brand-text);
+    margin: 0 0 6px;
+    letter-spacing: -0.01em;
+  }
+  .home-service-desc {
+    font-size: 13px;
+    color: var(--brand-text-dim);
+    line-height: 1.5;
+    margin: 0 0 16px;
+    flex: 1;
+  }
+  .home-service-cta {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--brand-accent);
+    align-self: flex-start;
+  }
+
+  @media (max-width: 600px) {
+    .home-main { padding: 24px 12px 40px; }
+    .home-title { font-size: 24px; }
+  }
+</style>

@@ -135,7 +135,7 @@ const { targets, roundId, roundStatus } = Astro.props;
   import type { VoterView } from '@/lib/castle-battle/types';
   import { SUPABASE_URL, SUPABASE_ANON_KEY } from '@/lib/shared/supabase';
 
-  const AUTH_KEY = 'pnx-mb-auth-v1';
+  const AUTH_KEY = 'pnx-sk-auth-v1';
   function myKsId(): string | null {
     try {
       const raw = localStorage.getItem(AUTH_KEY);
@@ -144,11 +144,11 @@ const { targets, roundId, roundStatus } = Astro.props;
       return obj?.record?.kingshot_id ?? null;
     } catch { return null; }
   }
-  function getAuthRecord(): { kingshot_id: string; pin?: string } | null {
+  function getAuthRecord(): { token: string } | null {
     try {
       const obj = JSON.parse(localStorage.getItem(AUTH_KEY) ?? '');
-      if (!obj?.record?.kingshot_id) return null;
-      return obj.record;
+      if (!obj?.token) return null;
+      return { token: obj.token };
     } catch { return null; }
   }
 
@@ -156,7 +156,7 @@ const { targets, roundId, roundStatus } = Astro.props;
 
   async function callCbFn(body: Record<string, unknown>): Promise<any> {
     const auth = getAuthRecord();
-    const base = auth ? { player_id: auth.kingshot_id, pin: auth.pin } : {};
+    const base = auth ? { token: auth.token } : {};
     const payload = { ...base, ...body };
     const res = await fetch(CB_FN_URL, {
       method: 'POST',

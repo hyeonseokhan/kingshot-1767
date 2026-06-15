@@ -31,6 +31,13 @@ export const tabs: NavTab[] = [
   //   path: '/castle-battle/',
   //   pathPrefix: '/castle-battle/',
   // },
+  {
+    id: 'strategy',
+    title: ko.nav.strategy,
+    titleKey: 'nav.strategy',
+    path: '/strategy/',
+    pathPrefix: '/strategy/',
+  },
 ];
 
 /** 현재 URL 경로에 매칭되는 탭. 매칭 없으면 null (홈 등). */
