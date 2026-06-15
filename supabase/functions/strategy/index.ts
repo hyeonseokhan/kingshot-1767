@@ -38,8 +38,12 @@ const corsHeaders = {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_KEY  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
+// ── v1: 게임 공식 API ─────────────────────────────────────────────
 const KS_API_BASE   = "https://kingshot-giftcode.centurygame.com/api";
 const KS_API_SECRET = "mN4!pQs6JrYwV9";
+
+// ── v2: 커뮤니티 트래커 API ───────────────────────────────────────
+const JEAB_API_BASE = "https://kingshot.jeab.dev";
 
 const dbHeaders: Record<string, string> = {
   apikey:        SERVICE_KEY,
@@ -71,6 +75,29 @@ async function dbPatch(path: string, body: Record<string, unknown>): Promise<voi
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`db patch ${res.status}: ${await res.text()}`);
+}
+
+async function dbPost(table: string, body: Record<string, unknown>): Promise<void> {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+    method: "POST",
+    headers: { ...dbHeaders, Prefer: "return=minimal" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`db post ${res.status}: ${await res.text()}`);
+}
+
+async function dbPostReturn(table: string, body: Record<string, unknown>): Promise<any> {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+    method: "POST",
+    headers: {
+      ...dbHeaders,
+      Prefer: "return=representation",
+      Accept: "application/vnd.pgrst.object+json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`db post ${res.status}: ${await res.text()}`);
+  return res.json();
 }
 
 // ─── Crypto (게임 API 서명용) ─────────────────────────────────
@@ -108,6 +135,57 @@ async function fetchGamePlayer(kingshotId: string): Promise<{ nickname: string; 
     const json = await res.json();
     if (json.code !== 0 || !json.data) return null;
     return { nickname: json.data.nickname, avatar_url: json.data.avatar_image ?? null };
+  } catch {
+    return null;
+  }
+}
+
+// ── v2 플레이어 조회 ──────────────────────────────────────────────
+
+interface GamePlayerV2 {
+  nickname:                string;
+  avatar_url:              string | null;
+  city_level:              number | null;
+  state:                   number | null;
+  power:                   number | null;
+  life_tree_level:         number | null;
+  alliance_id:             number | null;
+  alliance_abbr:           string | null;
+  alliance_name:           string | null;
+  alliance_rank:           number | null;
+  mystic_trial_score:      number | null;
+  mystic_trial_rank:       number | null;
+  mystic_trial_kid:        number | null;
+  mystic_trial_updated_ts: number | null;
+  v2_tag:                  string | null;
+  v2_last_refreshed_at:    string | null;
+}
+
+async function fetchGamePlayerV2(kingshotId: string): Promise<GamePlayerV2 | null> {
+  try {
+    const res = await fetch(`${JEAB_API_BASE}/api/players/${encodeURIComponent(kingshotId)}`);
+    if (!res.ok) return null;
+    const json = await res.json();
+    if (!json?.id) return null;
+    const avatarUrl = json.avatar_url ? `${JEAB_API_BASE}${json.avatar_url}` : null;
+    return {
+      nickname:                json.username           ?? "",
+      avatar_url:              avatarUrl,
+      city_level:              json.town_hall_level    ?? null,
+      state:                   json.state              ?? null,
+      power:                   json.power              ?? null,
+      life_tree_level:         json.life_tree_level    ?? null,
+      alliance_id:             json.alliance_id        ?? null,
+      alliance_abbr:           json.alliance_abbr      ?? null,
+      alliance_name:           json.alliance_name      ?? null,
+      alliance_rank:           json.alliance_rank      ?? null,
+      mystic_trial_score:      json.mystic_trial_score ?? null,
+      mystic_trial_rank:       json.mystic_trial_rank  ?? null,
+      mystic_trial_kid:        json.mystic_trial_kid   ?? null,
+      mystic_trial_updated_ts: json.mystic_trial_updated_ts ?? null,
+      v2_tag:                  json.tag                ?? null,
+      v2_last_refreshed_at:    json.last_refreshed_at  ?? null,
+    };
   } catch {
     return null;
   }
@@ -200,33 +278,46 @@ Deno.serve(async (req) => {
       const { player_id } = body;
       if (!isValidPlayerId(player_id)) return json({ ok: false, error: "invalid_player_id" });
 
-      const gamePlayer = await fetchGamePlayer(player_id as string);
-      if (!gamePlayer) return json({ ok: false, error: "player_not_found" });
-
-      const survey = await dbSelectOne(
-        `kvk_speedup_survey?kingshot_id=eq.${encodeURIComponent(player_id as string)}&select=city_level`,
-      );
+      // v2 호출 (v1: fetchGamePlayer 는 코드 유지)
+      const player = await fetchGamePlayerV2(player_id as string);
+      if (!player) return json({ ok: false, error: "player_not_found" });
 
       return json({
-        ok: true,
-        nickname:   gamePlayer.nickname,
-        avatar_url: gamePlayer.avatar_url,
-        city_level: survey?.city_level ?? null,
+        ok:                      true,
+        nickname:                player.nickname,
+        avatar_url:              player.avatar_url,
+        city_level:              player.city_level,
+        // v2 확장 필드 — 상세보기 다이얼로그용
+        state:                   player.state,
+        power:                   player.power,
+        life_tree_level:         player.life_tree_level,
+        alliance_id:             player.alliance_id,
+        alliance_abbr:           player.alliance_abbr,
+        alliance_name:           player.alliance_name,
+        alliance_rank:           player.alliance_rank,
+        mystic_trial_score:      player.mystic_trial_score,
+        mystic_trial_rank:       player.mystic_trial_rank,
+        mystic_trial_kid:        player.mystic_trial_kid,
+        mystic_trial_updated_ts: player.mystic_trial_updated_ts,
+        v2_tag:                  player.v2_tag,
+        v2_last_refreshed_at:    player.v2_last_refreshed_at,
       });
     }
 
     // ── upsert-position ────────────────────────────────────
     if (action === "upsert-position") {
-      const { token, id, kingshot_id, nickname, avatar_url, city_level } = body;
+      const { token, id, kingshot_id, nickname, avatar_url, city_level, power, alliance_abbr } = body;
       if (typeof id !== "number") return json({ ok: false, error: "invalid_id" });
 
       await requireStrategyAdmin(token);
 
       await dbPatch(`strategy_assignments?id=eq.${id}`, {
-        kingshot_id: kingshot_id ?? null,
-        nickname:    nickname    ?? null,
-        avatar_url:  avatar_url  ?? null,
-        city_level:  city_level  ?? null,
+        kingshot_id:   kingshot_id   ?? null,
+        nickname:      nickname      ?? null,
+        avatar_url:    avatar_url    ?? null,
+        city_level:    city_level    ?? null,
+        power:         power         ?? null,
+        alliance_abbr: alliance_abbr ?? null,
       });
 
       return json({ ok: true });
@@ -240,10 +331,12 @@ Deno.serve(async (req) => {
       await requireStrategyAdmin(token);
 
       await dbPatch(`strategy_assignments?id=eq.${id}`, {
-        kingshot_id: null,
-        nickname:    null,
-        avatar_url:  null,
-        city_level:  null,
+        kingshot_id:   null,
+        nickname:      null,
+        avatar_url:    null,
+        city_level:    null,
+        power:         null,
+        alliance_abbr: null,
       });
 
       return json({ ok: true });
@@ -260,7 +353,7 @@ Deno.serve(async (req) => {
       await requireStrategyAdmin(token);
 
       const rows = await dbSelect(
-        `strategy_assignments?id=in.(${id_a},${id_b})&select=id,kingshot_id,nickname,avatar_url,city_level`,
+        `strategy_assignments?id=in.(${id_a},${id_b})&select=id,kingshot_id,nickname,avatar_url,city_level,power,alliance_abbr`,
       );
       if (rows.length !== 2) return json({ ok: false, error: "position_not_found" });
 
@@ -268,25 +361,143 @@ Deno.serve(async (req) => {
       const b = rows.find((r: any) => r.id === id_b)!;
 
       await dbPatch(`strategy_assignments?id=eq.${id_a}`, {
-        kingshot_id: b.kingshot_id,
-        nickname:    b.nickname,
-        avatar_url:  b.avatar_url,
-        city_level:  b.city_level,
+        kingshot_id:   b.kingshot_id,
+        nickname:      b.nickname,
+        avatar_url:    b.avatar_url,
+        city_level:    b.city_level,
+        power:         b.power         ?? null,
+        alliance_abbr: b.alliance_abbr ?? null,
       });
       await dbPatch(`strategy_assignments?id=eq.${id_b}`, {
-        kingshot_id: a.kingshot_id,
-        nickname:    a.nickname,
-        avatar_url:  a.avatar_url,
-        city_level:  a.city_level,
+        kingshot_id:   a.kingshot_id,
+        nickname:      a.nickname,
+        avatar_url:    a.avatar_url,
+        city_level:    a.city_level,
+        power:         a.power         ?? null,
+        alliance_abbr: a.alliance_abbr ?? null,
       });
 
       return json({ ok: true });
     }
 
+    // ── refresh-all-positions ──────────────────────────────
+    if (action === "refresh-all-positions") {
+      const { token } = body;
+      await requireStrategyAdmin(token);
+
+      // 킹샷 ID 가 배정된 슬롯만 조회
+      const rows = await dbSelect(
+        `strategy_assignments?kingshot_id=not.is.null&select=id,kingshot_id`,
+      );
+
+      // 동일 플레이어가 여러 슬롯에 있을 수 있으므로 kid → [id, ...] 로 묶기
+      const byKid = new Map<string, number[]>();
+      for (const r of rows) {
+        if (!byKid.has(r.kingshot_id)) byKid.set(r.kingshot_id, []);
+        byKid.get(r.kingshot_id)!.push(r.id);
+      }
+
+      let refreshed = 0;
+      let failed    = 0;
+
+      for (const [kid, ids] of byKid) {
+        const player = await fetchGamePlayerV2(kid);
+        if (!player) { failed++; continue; }
+
+        // strategy_assignments 갱신 (모든 슬롯)
+        for (const id of ids) {
+          await dbPatch(`strategy_assignments?id=eq.${id}`, {
+            nickname:      player.nickname,
+            avatar_url:    player.avatar_url,
+            city_level:    player.city_level,
+            power:         player.power         ?? null,
+            alliance_abbr: player.alliance_abbr ?? null,
+          });
+        }
+
+        // kingshot_users 도 최신 v2 데이터로 갱신
+        await dbPatch(`kingshot_users?kingshot_id=eq.${encodeURIComponent(kid)}`, {
+          nickname:                player.nickname,
+          avatar_url:              player.avatar_url,
+          city_level:              player.city_level,
+          state:                   player.state,
+          power:                   player.power,
+          life_tree_level:         player.life_tree_level,
+          alliance_id:             player.alliance_id,
+          alliance_abbr:           player.alliance_abbr,
+          alliance_name:           player.alliance_name,
+          alliance_rank:           player.alliance_rank,
+          mystic_trial_score:      player.mystic_trial_score,
+          mystic_trial_rank:       player.mystic_trial_rank,
+          mystic_trial_kid:        player.mystic_trial_kid,
+          mystic_trial_updated_ts: player.mystic_trial_updated_ts,
+          v2_tag:                  player.v2_tag,
+          v2_last_refreshed_at:    player.v2_last_refreshed_at,
+        });
+
+        refreshed++;
+      }
+
+      return json({ ok: true, refreshed, failed });
+    }
+
+    // ── chat-fetch ─────────────────────────────────────────
+    if (action === "chat-fetch") {
+      const rows = await dbSelect(
+        "strategy_chat?select=id,kingshot_id,nickname,avatar_url,message,created_at&order=created_at.desc&limit=80",
+      );
+      return json({ ok: true, messages: rows.reverse() });
+    }
+
+    // ── chat-send ──────────────────────────────────────────
+    if (action === "chat-send") {
+      const { token, message } = body;
+      if (!isValidToken(token)) return json({ ok: false, error: "invalid_token" });
+      if (typeof message !== "string" || message.trim().length === 0) {
+        return json({ ok: false, error: "invalid_message" });
+      }
+      const text = message.trim().slice(0, 200);
+
+      const user = await verifyToken(token);
+      if (!user) return json({ ok: false, error: "invalid_token" });
+
+      const userRow = await dbSelectOne(
+        `kingshot_users?kingshot_id=eq.${encodeURIComponent(user.kingshot_id)}&select=nickname,avatar_url,last_chat_at`,
+      );
+      if (!userRow) return json({ ok: false, error: "invalid_token" });
+
+      // 5분 레이트 리밋
+      if (userRow.last_chat_at) {
+        const diffMs = Date.now() - new Date(userRow.last_chat_at).getTime();
+        const limitMs = 5 * 60 * 1000;
+        if (diffMs < limitMs) {
+          return json({
+            ok: false,
+            error: "rate_limited",
+            retry_after: Math.ceil((limitMs - diffMs) / 1000),
+          });
+        }
+      }
+
+      const now = new Date().toISOString();
+      const newMsg = await dbPostReturn("strategy_chat", {
+        kingshot_id: user.kingshot_id,
+        nickname:    userRow.nickname,
+        avatar_url:  userRow.avatar_url ?? null,
+        message:     text,
+      });
+      await dbPatch(
+        `kingshot_users?kingshot_id=eq.${encodeURIComponent(user.kingshot_id)}`,
+        { last_chat_at: now },
+      );
+
+      return json({ ok: true, message: newMsg });
+    }
+
     return json({ ok: false, error: "unknown_action" }, 400);
   } catch (err) {
     const msg = String((err as Error)?.message ?? err);
-    const KNOWN = new Set(["invalid_token", "not_admin", "position_not_found", "same_position"]);
+    const KNOWN = new Set(["invalid_token", "not_admin", "position_not_found", "same_position", "rate_limited"]);
     if (KNOWN.has(msg)) return json({ ok: false, error: msg });
     console.error(`[strategy] unexpected error action=${action}`, err);
     return json({ ok: false, error: "unexpected_error" }, 500);

@@ -944,6 +944,63 @@ export const ko = {
       },
     },
   },
+  strategy: {
+    gate: {
+      title: '전략 페이지 접근 제한',
+      desc: '1767 멤버이고 센터 레벨 26 이상인 경우에만 열람 가능합니다.',
+      btn: '로그인',
+    },
+    hero: {
+      eyebrow: '대외비',
+      title: '캐슬 전투 전략',
+      desc: '시나리오별 집결장 · 집결원 포지션을 확인하세요.',
+    },
+    loading: '불러오는 중…',
+    tabs: {
+      attack: '공격',
+      defense: '수비',
+      counter: '카운터',
+    },
+    scenario: {
+      attack: '캐슬 선 공격 → 후 공격 → 카운터 순서로 진행합니다.',
+      defense: '카운터 부대가 캐슬 내부에서 수비 대기합니다.',
+      counter: '선 공격 → 후 공격 순으로 카운터 집결합니다.',
+    },
+    grid: {
+      leaderLabel: '집결장',
+      leaderAdd: '집결장 등록',
+      memberAdd: '집결원 등록',
+      slotEmpty: '슬롯 없음',
+    },
+    chat: {
+      title: '실시간 채팅',
+      sub: '5분 · 1회',
+      notice: '채팅에 참여하려면 로그인이 필요합니다.',
+      placeholder: '메시지 입력…',
+      send: '전송',
+      cooldownPlaceholder: '쿨다운 중…',
+      cooldownMinSec: '{m}분 {s}초 후 입력 가능',
+      cooldownSec: '{s}초 후 입력 가능',
+    },
+    dialog: {
+      titleLeader: '집결장 편집',
+      titleMember: '집결원 편집',
+      removeBtn: '포지션 비우기',
+      changeBtn: '변경하기',
+      idLabel: '킹샷 ID',
+      idPlaceholder: '예: 270680423',
+      lookupBtn: '조회',
+      backBtn: '뒤로',
+      saveBtn: '저장',
+    },
+    detail: {
+      title: '플레이어 정보',
+      tc: '센터 레벨',
+      alliance: '연맹',
+      power: '전투력',
+      editBtn: '편집',
+    },
+  },
 } as const;
 
 // leaf 의 한글 literal 타입을 string 으로 풀어줌. en.ts 가 같은 키 구조만 충족하면 통과

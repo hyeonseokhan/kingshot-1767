@@ -1,55 +1,148 @@
 ---
-// 전략 — 포지션별 담당자 배정 (인증 게이트 + 관리자 편집 + D&D).
+// 전략 페이지 — 시나리오 탭 + 70/30 레이아웃(전략 | 실시간 채팅).
 //
 // 데이터 흐름 (클라이언트 렌더):
-//   1. 페이지 로드 → localStorage('pnx-sk-auth-v1') 확인 (통합 인증 토큰)
-//   2. 미인증 → 로그인 게이트 표시 / 인증됨 → strategy EF verify-access 호출
-//   3. 접근 불가(city_level < 26 등) → 오류 메시지
-//   4. 접근 가능 → strategy_assignments 테이블 조회 (anon read) + 렌더
-//   5. strategy_admins 에 등록된 관리자 → 편집 UI + D&D 활성화
+//   1. 페이지 로드 → localStorage('pnx-sk-auth-v1') 확인
+//   2. 미인증 → 로그인 게이트 / 인증 → strategy EF verify-access 호출
+//   3. 접근 가능 → strategy_assignments anon 조회 + 시나리오 탭 렌더
+//   4. strategy_admins 등록 관리자 → 편집 UI(집결장 프레임 + 집결원 등록 버튼) + D&D
 //
-// 편집 (관리자 전용):
-//   - 집결장/집결원 슬롯 클릭 → 편집 다이얼로그 → lookup-player → upsert-position / clear-position
-//   - 슬롯 드래그 → 다른 슬롯에 드롭 → swap-positions
+// 채팅:
+//   - 초기 80건 REST 조회 (chat-fetch) → Supabase Realtime INSERT 수신
+//   - 전송: strategy EF chat-send (서버사이드 5분 레이트리밋)
+//   - 클라이언트 레이트리밋: localStorage 'pnx-chat-cd' (카운트다운 UI)
 
 import StrategyLayout from '@/layouts/StrategyLayout.astro';
 import '@/styles/strategy.css';
 ---
 
 <StrategyLayout
-  title="공격 전략 — 1767 서버"
-  description="KVK 설문 참여자 기반 포지션별 공격 담당 전략 안내"
+  title="캐슬 전투 전략 — 1767 서버"
+  description="KvK 전략 — 시나리오별 집결장/집결원 포지션 안내 (대외비)"
 >
   <!-- 인증 게이트 -->
   <div id="st-gate" class="st-gate">
     <div class="st-gate-card">
       <div class="st-gate-icon">🔒</div>
-      <h2 class="st-gate-title">전략 페이지 접근 제한</h2>
-      <p class="st-gate-desc" id="st-gate-desc">
+      <h2 class="st-gate-title" data-i18n="strategy.gate.title">전략 페이지 접근 제한</h2>
+      <p class="st-gate-desc" id="st-gate-desc" data-i18n="strategy.gate.desc">
         1767 멤버이고 센터 레벨 26 이상인 경우에만 열람 가능합니다.
       </p>
-      <button class="st-gate-btn" id="st-gate-btn" type="button">로그인</button>
+      <button class="st-gate-btn" id="st-gate-btn" type="button" data-i18n="strategy.gate.btn">로그인</button>
       <div class="st-gate-status" id="st-gate-status" hidden></div>
     </div>
   </div>
 
   <!-- 메인 콘텐츠 (인증 후 노출) -->
   <div id="st-main" hidden>
+    <!-- 히어로 -->
     <section class="st-hero">
-      <p class="st-hero-eyebrow" data-i18n="nav.strategy">전략</p>
-      <h1 class="st-hero-title">공격 전략 배정</h1>
-      <p class="st-hero-desc">포지션별 담당자 목록입니다. 집결장/집결원을 확인하세요.</p>
+      <p class="st-hero-eyebrow" data-i18n="strategy.hero.eyebrow">대외비</p>
+      <h1 class="st-hero-title" data-i18n="strategy.hero.title">캐슬 전투 전략</h1>
+      <p class="st-hero-desc" data-i18n="strategy.hero.desc">시나리오별 집결장 · 집결원 포지션을 확인하세요.</p>
     </section>
-    <div id="st-grid" class="st-grid">
-      <!-- JS 가 렌더 -->
-    </div>
-    <div id="st-loading" class="st-loading">
-      <span class="st-loading-spinner"></span>
-      <span>불러오는 중…</span>
+
+    <!-- 70/30 레이아웃 -->
+    <div class="st-page-layout">
+      <!-- 좌: 시나리오 패널 + 플로우 그리드 -->
+      <div class="st-page-left">
+        <!-- 시나리오 패널 (탭 + 설명 통합) -->
+        <div class="st-scenario-panel">
+          <div class="st-tabs-row">
+          <div class="st-tabs" role="tablist" id="st-tabs">
+            <button class="st-tab-btn is-active" type="button" role="tab"
+              aria-selected="true" data-scenario-idx="0" data-i18n="strategy.tabs.attack">공격</button>
+            <button class="st-tab-btn" type="button" role="tab"
+              aria-selected="false" data-scenario-idx="1" data-i18n="strategy.tabs.defense">수비</button>
+            <button class="st-tab-btn" type="button" role="tab"
+              aria-selected="false" data-scenario-idx="2" data-i18n="strategy.tabs.counter">카운터</button>
+          </div>
+          <button type="button" id="st-refresh-btn" class="st-refresh-btn" hidden aria-label="포지션 갱신">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            포지션 갱신
+          </button>
+          </div>
+          <div class="st-scenario-desc" id="st-scenario-desc" aria-live="polite" data-i18n="strategy.scenario.attack">
+            캐슬 선 공격 → 후 공격 → 카운터 순서로 진행합니다.
+          </div>
+        </div>
+
+        <!-- 로딩 -->
+        <div id="st-loading" class="st-loading">
+          <span class="st-loading-spinner"></span>
+          <span data-i18n="strategy.loading">불러오는 중…</span>
+        </div>
+
+        <!-- 플로우 그리드 (JS 렌더) -->
+        <div id="st-flow-grid" class="st-flow-grid" hidden></div>
+      </div>
+
+      <!-- 우: 채팅 패널 -->
+      <div class="st-page-right">
+        <div class="st-chat-panel">
+          <div class="st-chat-header">
+            <span class="st-chat-header-title" data-i18n="strategy.chat.title">실시간 채팅</span>
+            <span class="st-chat-header-sub" data-i18n="strategy.chat.sub">5분 · 1회</span>
+          </div>
+          <div class="st-chat-messages" id="st-chat-messages"></div>
+          <!-- 미인증 안내 -->
+          <div id="st-chat-notice" class="st-chat-notice" hidden data-i18n="strategy.chat.notice">
+            채팅에 참여하려면 로그인이 필요합니다.
+          </div>
+          <!-- 입력 영역 (인증 후) -->
+          <div id="st-chat-input-area" class="st-chat-input-area" hidden>
+            <div class="st-chat-input-row">
+              <textarea
+                id="st-chat-textarea"
+                class="st-chat-textarea"
+                rows="1"
+                maxlength="200"
+                placeholder="메시지 입력…"
+                data-i18n-attr-placeholder="strategy.chat.placeholder"
+              ></textarea>
+              <button type="button" class="st-chat-send-btn" id="st-chat-send-btn" data-i18n="strategy.chat.send">전송</button>
+            </div>
+            <div class="st-chat-cooldown" id="st-chat-cooldown"></div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
-  <!-- 편집 다이얼로그 (관리자 전용) -->
+  <!-- 상세보기 다이얼로그 -->
+  <dialog id="st-detail-dialog" class="st-detail-dialog">
+    <div class="st-detail-card">
+      <header class="st-detail-head">
+        <strong data-i18n="strategy.detail.title">플레이어 정보</strong>
+        <button type="button" class="st-detail-close" id="st-detail-close">&times;</button>
+      </header>
+      <div class="st-detail-body">
+        <div id="st-detail-av" class="st-detail-av"></div>
+        <div id="st-detail-nickname" class="st-detail-nickname"></div>
+        <div id="st-detail-id" class="st-detail-kid"></div>
+        <dl class="st-detail-stats">
+          <div class="st-detail-stat">
+            <dt data-i18n="strategy.detail.tc">센터 레벨</dt>
+            <dd id="st-detail-tc">-</dd>
+          </div>
+          <div class="st-detail-stat">
+            <dt data-i18n="strategy.detail.alliance">연맹</dt>
+            <dd id="st-detail-alliance">-</dd>
+          </div>
+          <div class="st-detail-stat">
+            <dt data-i18n="strategy.detail.power">전투력</dt>
+            <dd id="st-detail-power">-</dd>
+          </div>
+        </dl>
+      </div>
+      <footer class="st-detail-footer">
+        <button type="button" class="st-detail-edit-btn" id="st-detail-edit-btn"
+          data-i18n="strategy.detail.editBtn" hidden>편집</button>
+      </footer>
+    </div>
+  </dialog>
+
+  <!-- 편집 다이얼로그 -->
   <dialog id="st-pos-dialog" class="st-pos-dialog">
     <div class="st-pos-dialog-card">
       <header class="st-pos-dialog-head">
@@ -57,9 +150,24 @@ import '@/styles/strategy.css';
         <button type="button" class="st-pos-dialog-close" id="st-pos-dialog-close">&times;</button>
       </header>
       <div class="st-pos-dialog-body">
+        <!-- Phase 0: 현재 배정 확인 (채워진 슬롯 클릭 시) -->
+        <div id="st-pos-phase-view" class="st-pos-phase" hidden>
+          <div class="st-pos-preview">
+            <div class="st-pos-preview-avatar" id="st-pos-view-avatar"></div>
+            <div class="st-pos-preview-info">
+              <div class="st-pos-preview-name" id="st-pos-view-name">-</div>
+              <div class="st-pos-preview-tc"   id="st-pos-view-tc"></div>
+            </div>
+          </div>
+          <div class="st-pos-status" id="st-pos-view-status"></div>
+          <div class="st-pos-actions">
+            <button type="button" class="st-pos-btn-danger"    id="st-pos-remove-btn" data-i18n="strategy.dialog.removeBtn">포지션 비우기</button>
+            <button type="button" class="st-pos-btn-secondary" id="st-pos-change-btn" data-i18n="strategy.dialog.changeBtn">변경하기</button>
+          </div>
+        </div>
         <!-- Phase 1: ID 입력 -->
-        <div id="st-pos-phase-id" class="st-pos-phase">
-          <label class="st-pos-label">킹샷 ID</label>
+        <div id="st-pos-phase-id" class="st-pos-phase" hidden>
+          <label class="st-pos-label" data-i18n="strategy.dialog.idLabel">킹샷 ID</label>
           <div class="st-pos-input-row">
             <input
               id="st-pos-id-input"
@@ -67,25 +175,25 @@ import '@/styles/strategy.css';
               inputmode="numeric"
               autocomplete="off"
               placeholder="예: 270680423"
+              data-i18n-attr-placeholder="strategy.dialog.idPlaceholder"
             />
-            <button type="button" class="st-pos-btn-primary" id="st-pos-lookup-btn">조회</button>
+            <button type="button" class="st-pos-btn-primary" id="st-pos-lookup-btn" data-i18n="strategy.dialog.lookupBtn">조회</button>
           </div>
           <div class="st-pos-status" id="st-pos-id-status"></div>
         </div>
         <!-- Phase 2: 미리보기 + 저장 -->
         <div id="st-pos-phase-confirm" class="st-pos-phase" hidden>
-          <div class="st-pos-preview" id="st-pos-preview">
+          <div class="st-pos-preview">
             <div class="st-pos-preview-avatar" id="st-pos-preview-avatar"></div>
             <div class="st-pos-preview-info">
               <div class="st-pos-preview-name" id="st-pos-preview-name">-</div>
-              <div class="st-pos-preview-tc" id="st-pos-preview-tc"></div>
+              <div class="st-pos-preview-tc"   id="st-pos-preview-tc"></div>
             </div>
           </div>
           <div class="st-pos-status" id="st-pos-confirm-status"></div>
           <div class="st-pos-actions">
-            <button type="button" class="st-pos-btn-danger" id="st-pos-clear-btn">포지션 비우기</button>
-            <button type="button" class="st-pos-btn-secondary" id="st-pos-back-btn">뒤로</button>
-            <button type="button" class="st-pos-btn-primary" id="st-pos-save-btn">저장</button>
+            <button type="button" class="st-pos-btn-secondary" id="st-pos-back-btn" data-i18n="strategy.dialog.backBtn">뒤로</button>
+            <button type="button" class="st-pos-btn-primary"   id="st-pos-save-btn" data-i18n="strategy.dialog.saveBtn">저장</button>
           </div>
         </div>
       </div>
@@ -94,49 +202,72 @@ import '@/styles/strategy.css';
 </StrategyLayout>
 
 <script>
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from '@/lib/shared/supabase';
+import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from '@/lib/shared/supabase';
+import { t, onLangChange } from '@/i18n';
 
-// ── 상수 ──────────────────────────────────────────────────────
-const AUTH_KEY     = 'pnx-sk-auth-v1';
-const STRATEGY_FN  = SUPABASE_URL + '/functions/v1/strategy';
-const DB_BASE      = SUPABASE_URL + '/rest/v1';
+// ── 상수 ──────────────────────────────────────────────────────────
+const AUTH_KEY       = 'pnx-sk-auth-v1';
+const CHAT_CD_KEY    = 'pnx-chat-cd';  // ISO 문자열: 쿨다운 종료 시각
+const STRATEGY_FN    = SUPABASE_URL + '/functions/v1/strategy';
+const DB_BASE        = SUPABASE_URL + '/rest/v1';
+const CHAT_LIMIT_MS  = 5 * 60 * 1000;
 
-const GROUP_META: Record<string, { label: string; labelEn: string }> = {
-  'pre-attack':  { label: '캐슬 선 공격',  labelEn: 'Pre-Attack' },
-  'post-attack': { label: '캐슬 후 공격', labelEn: 'Post-Attack' },
-  'counter':     { label: '카운터',        labelEn: 'Counter' },
-};
-const GROUP_ORDER = ['pre-attack', 'post-attack', 'counter'];
+// ── 시나리오 설정 ──────────────────────────────────────────────────
+const SCENARIOS = [
+  { descKey: 'strategy.scenario.attack',  columns: ['attack-pre', 'attack-post', 'attack-counter'] as const },
+  { descKey: 'strategy.scenario.defense', columns: ['defense-counter'] as const },
+  { descKey: 'strategy.scenario.counter', columns: ['counter-pre', 'counter-post'] as const },
+];
 
-// ── 타입 ──────────────────────────────────────────────────────
+const BADGE_CLS = ['st-badge-1', 'st-badge-2', 'st-badge-3'] as const;
+
+// ── 타입 ──────────────────────────────────────────────────────────
 interface AuthRecord {
   kingshot_id: string;
-  nickname: string;
+  nickname:    string;
   avatar_url?: string | null;
-  is_admin?: boolean;
+  is_admin?:   boolean;
 }
 
 interface Assignment {
-  id: number;
-  group_id: string;
-  is_leader: boolean;
+  id:            number;
+  group_id:      string;
+  is_leader:     boolean;
   display_order: number;
-  kingshot_id: string | null;
-  nickname: string | null;
-  avatar_url: string | null;
-  city_level: number | null;
+  kingshot_id:   string | null;
+  nickname:      string | null;
+  avatar_url:    string | null;
+  city_level:    number | null;
+  power:         number | null;
+  alliance_abbr: string | null;
 }
 
-// ── 상태 ──────────────────────────────────────────────────────
-let authRecord: AuthRecord | null = null;
-let authToken:  string | null     = null;
-let isAdmin    = false;
-let assignments: Assignment[] = [];
-let editingId: number | null  = null;
-let pendingLookup: { nickname: string; avatar_url: string | null; city_level: number | null } | null = null;
-let dragSourceId: number | null = null;
+interface ChatMessage {
+  id:          number;
+  kingshot_id: string;
+  nickname:    string;
+  avatar_url:  string | null;
+  message:     string;
+  created_at:  string;
+}
 
-// ── auth 헬퍼 ──────────────────────────────────────────────────
+// ── 상태 ──────────────────────────────────────────────────────────
+let authRecord:   AuthRecord | null = null;
+let authToken:    string | null     = null;
+let isAdmin       = false;
+let assignments:  Assignment[]      = [];
+let activeScenario = 0;
+let editingId:    number | null     = null;
+let detailAssignmentId: number | null = null;
+let pendingLookup: { nickname: string; avatar_url: string | null; city_level: number | null; power: number | null; alliance_abbr: string | null } | null = null;
+let dragSourceId: number | null     = null;
+let cdTimerId:    ReturnType<typeof setInterval> | null = null;
+let lastChatDate  = '';  // 마지막으로 표시된 날짜 (날짜 구분선 중복 방지)
+let lastChatKid   = '';
+let lastChatGroup: HTMLElement | null = null;
+const recentSentIds = new Set<number>(); // 즉시 추가한 메시지 id — Realtime 중복 방지
+
+// ── 헬퍼 ──────────────────────────────────────────────────────────
 function readAuth(): { token: string; record: AuthRecord } | null {
   try {
     const raw = localStorage.getItem(AUTH_KEY);
@@ -147,7 +278,45 @@ function readAuth(): { token: string; record: AuthRecord } | null {
   } catch { return null; }
 }
 
-// ── EF 호출 ───────────────────────────────────────────────────
+function initial(nick: string | null): string {
+  return (nick?.[0] ?? '?').toUpperCase();
+}
+
+function avatarHtml(url: string | null, nick: string | null, size: 'lg' | 'sm'): string {
+  const cls = size === 'lg' ? 'st-rep-avatar' : 'st-member-avatar';
+  const ini = initial(nick);
+  if (url) {
+    const px = size === 'lg' ? 84 : 38;
+    return `<div class="${cls}"><img src="${escHtml(url)}" alt="${escHtml(nick ?? '')}" width="${px}" height="${px}" loading="lazy" onerror="this.parentElement.textContent='${escHtml(ini)}';this.remove()"></div>`;
+  }
+  return `<div class="${cls}">${escHtml(ini)}</div>`;
+}
+
+function escHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function fmtTime(iso: string): string {
+  const d = new Date(iso);
+  const h = d.getHours().toString().padStart(2, '0');
+  const m = d.getMinutes().toString().padStart(2, '0');
+  return `${h}:${m}`;
+}
+
+function fmtDate(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}.${(d.getMonth()+1).toString().padStart(2,'0')}.${d.getDate().toString().padStart(2,'0')}`;
+}
+
+function arrowSvg(): string {
+  return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
+}
+
+function plusSvg(sz = 24): string {
+  return `<svg width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`;
+}
+
+// ── EF 호출 ──────────────────────────────────────────────────────
 async function callFn(body: Record<string, unknown>): Promise<any> {
   const res = await fetch(STRATEGY_FN, {
     method: 'POST',
@@ -161,10 +330,10 @@ async function callFn(body: Record<string, unknown>): Promise<any> {
   return res.json();
 }
 
-// ── Supabase anon 직접 조회 ────────────────────────────────────
+// ── Supabase anon REST 조회 ───────────────────────────────────────
 async function fetchAssignments(): Promise<Assignment[]> {
   const res = await fetch(
-    `${DB_BASE}/strategy_assignments?select=id,group_id,is_leader,display_order,kingshot_id,nickname,avatar_url,city_level&order=group_id.asc,is_leader.desc,display_order.asc`,
+    `${DB_BASE}/strategy_assignments?select=id,group_id,is_leader,display_order,kingshot_id,nickname,avatar_url,city_level,power,alliance_abbr&order=group_id.asc,is_leader.desc,display_order.asc`,
     { headers: { apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + SUPABASE_ANON_KEY } },
   );
   if (!res.ok) return [];
@@ -179,155 +348,276 @@ async function checkAdmin(kingshotId: string): Promise<boolean> {
   return res.status === 200;
 }
 
-// ── Gate UI ───────────────────────────────────────────────────
-const gate       = document.getElementById('st-gate')!;
-const gateBtn    = document.getElementById('st-gate-btn')!;
+// ── Gate UI ──────────────────────────────────────────────────────
+const gateEl     = document.getElementById('st-gate')!;
+const gateBtnEl  = document.getElementById('st-gate-btn')!;
 const gateStatus = document.getElementById('st-gate-status')!;
 const mainEl     = document.getElementById('st-main')!;
 const loadingEl  = document.getElementById('st-loading')!;
-const gridEl     = document.getElementById('st-grid')!;
+const flowGrid   = document.getElementById('st-flow-grid')!;
 
 function showGate(msg?: string) {
-  gate.hidden = false;
-  mainEl.hidden = true;
-  if (msg) {
-    gateStatus.textContent = msg;
-    gateStatus.hidden = false;
-  } else {
-    gateStatus.hidden = true;
-  }
+  gateEl.hidden  = false;
+  mainEl.hidden  = true;
+  if (msg) { gateStatus.textContent = msg; gateStatus.hidden = false; }
+  else        { gateStatus.hidden = true; }
 }
 
 function showMain() {
-  gate.hidden = true;
-  mainEl.hidden = false;
+  gateEl.hidden  = true;
+  mainEl.hidden  = false;
 }
 
 function setLoading(on: boolean) {
   loadingEl.hidden = !on;
-  gridEl.hidden    = on;
+  flowGrid.hidden  = on;
 }
 
-// ── 아바타 HTML ───────────────────────────────────────────────
-function initial(nickname: string | null): string {
-  return (nickname?.[0] ?? '?').toUpperCase();
+// ── 시나리오 탭 ─────────────────────────────────────────────────
+const tabsEl   = document.getElementById('st-tabs')!;
+const descEl   = document.getElementById('st-scenario-desc')!;
+
+tabsEl.querySelectorAll<HTMLButtonElement>('[data-scenario-idx]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const idx = Number(btn.dataset.scenarioIdx);
+    setScenario(idx);
+  });
+});
+
+function setScenario(idx: number) {
+  activeScenario = idx;
+  tabsEl.querySelectorAll<HTMLButtonElement>('[data-scenario-idx]').forEach((btn, i) => {
+    const active = i === idx;
+    btn.classList.toggle('is-active', active);
+    btn.setAttribute('aria-selected', String(active));
+  });
+  const descKey = SCENARIOS[idx].descKey;
+  descEl.dataset.i18n = descKey;
+  descEl.textContent  = t(descKey);
+  if (assignments.length > 0) renderFlowGrid();
 }
 
-function avatarHtml(avatarUrl: string | null, nick: string | null, size: 'lg' | 'sm'): string {
-  const cls = size === 'lg' ? 'st-rep-avatar' : 'st-member-avatar';
-  const ini = initial(nick);
-  if (avatarUrl) {
-    return `<div class="${cls}"><img src="${avatarUrl}" alt="${nick ?? ''}" width="${size === 'lg' ? 84 : 38}" height="${size === 'lg' ? 84 : 38}" loading="lazy" onerror="this.parentElement.textContent='${ini}';this.remove()" /></div>`;
-  }
-  return `<div class="${cls}">${ini}</div>`;
-}
-
-// ── 렌더 ──────────────────────────────────────────────────────
-function renderGrid() {
-  const grouped: Record<string, { leader: Assignment | null; members: Assignment[] }> = {};
-  for (const g of GROUP_ORDER) grouped[g] = { leader: null, members: [] };
-
+// ── 플로우 그리드 렌더 ────────────────────────────────────────────
+function groupAssignments(): Record<string, { leader: Assignment | null; members: Assignment[] }> {
+  const result: Record<string, { leader: Assignment | null; members: Assignment[] }> = {};
   for (const a of assignments) {
-    if (a.is_leader) grouped[a.group_id].leader = a;
-    else             grouped[a.group_id].members.push(a);
+    if (!result[a.group_id]) result[a.group_id] = { leader: null, members: [] };
+    if (a.is_leader) result[a.group_id].leader = a;
+    else             result[a.group_id].members.push(a);
+  }
+  return result;
+}
+
+function renderFlowGrid() {
+  const scenario  = SCENARIOS[activeScenario];
+  const cols      = scenario.columns as readonly string[];
+  const grouped   = groupAssignments();
+  const numCols   = cols.length;
+
+  // grid-template-columns: 컬럼 + 화살표 교차
+  const tpl: string[] = [];
+  for (let i = 0; i < numCols; i++) {
+    if (i > 0) tpl.push('30px');
+    tpl.push('minmax(0, 1fr)');
+  }
+  flowGrid.style.gridTemplateColumns = tpl.join(' ');
+
+  const cells: string[] = [];
+  for (let i = 0; i < numCols; i++) {
+    if (i > 0) {
+      cells.push(`<div class="st-flow-arrow">${arrowSvg()}</div>`);
+    }
+    const gid   = cols[i];
+    const badgeCls = BADGE_CLS[i] ?? 'st-badge-1';
+    cells.push(buildColumnHtml(grouped[gid] ?? { leader: null, members: [] }, gid, i + 1, badgeCls));
   }
 
-  gridEl.innerHTML = GROUP_ORDER.map((gid) => {
-    const { label } = GROUP_META[gid];
-    const { leader, members } = grouped[gid];
+  flowGrid.innerHTML = cells.join('');
 
-    const adminAttr = isAdmin ? `draggable="true"` : '';
-    const editCls   = isAdmin ? ' is-editable' : '';
-
-    // 집결장 슬롯
-    const leaderHtml = leader ? (() => {
-      const hasData = !!leader.kingshot_id;
-      const editBtn = isAdmin
-        ? `<button type="button" class="st-edit-btn" data-id="${leader.id}" aria-label="포지션 편집">✏️</button>`
-        : '';
-      return `
-        <div class="st-hero-block${editCls}" data-assignment-id="${leader.id}" ${adminAttr}>
-          ${isAdmin ? `<div class="st-drag-handle" aria-hidden="true">⠿</div>` : ''}
-          ${editBtn}
-          ${hasData
-            ? `${avatarHtml(leader.avatar_url, leader.nickname, 'lg')}
-               <div class="st-rep-name">${leader.nickname ?? ''}</div>
-               ${leader.city_level ? `<div class="st-rep-tc">TC ${leader.city_level}</div>` : ''}`
-            : `<div class="st-rep-empty">${isAdmin ? '<span class="st-empty-hint">+ 집결장 배정</span>' : '배정 없음'}</div>`
-          }
-        </div>`;
-    })() : `<div class="st-hero-block"><div class="st-rep-empty">슬롯 없음</div></div>`;
-
-    // 집결원 목록
-    const membersHtml = members.length === 0
-      ? `<div class="st-members-empty">멤버가 없습니다</div>`
-      : members.map((m) => {
-          const hasData = !!m.kingshot_id;
-          const editBtn = isAdmin
-            ? `<button type="button" class="st-member-edit-btn" data-id="${m.id}" aria-label="편집">✏️</button>`
-            : '';
-          return `
-            <div class="st-member${editCls}" data-assignment-id="${m.id}" ${adminAttr}>
-              ${isAdmin ? `<div class="st-drag-handle" aria-hidden="true">⠿</div>` : ''}
-              ${hasData
-                ? `${avatarHtml(m.avatar_url, m.nickname, 'sm')}
-                   <span class="st-member-name">${m.nickname ?? ''}</span>
-                   ${m.city_level ? `<span class="st-member-tc">TC ${m.city_level}</span>` : ''}`
-                : `<span class="st-member-name st-member-empty">${isAdmin ? '+ 집결원 배정' : '(빈 슬롯)'}</span>`
-              }
-              ${editBtn}
-            </div>`;
-        }).join('');
-
-    return `
-      <div class="st-col">
-        <h2 class="st-col-title">${label}</h2>
-        <div class="st-card">
-          ${leaderHtml}
-          <div class="st-members">${membersHtml}</div>
-        </div>
-      </div>`;
-  }).join('');
-
-  if (isAdmin) setupEditHandlers();
+  // + 버튼 핸들러는 항상 등록 (어드민 여부 무관)
+  setupEditHandlers();
+  // 드래그는 어드민만
   if (isAdmin) setupDragDrop();
 }
 
-// ── 편집 다이얼로그 ──────────────────────────────────────────
-const posDialog     = document.getElementById('st-pos-dialog')     as HTMLDialogElement;
+function buildColumnHtml(
+  data: { leader: Assignment | null; members: Assignment[] },
+  gid:  string,
+  order: number,
+  badgeCls: string,
+): string {
+  const { leader, members } = data;
+  const adminAttr = isAdmin ? `draggable="true"` : '';
+
+  /* 집결장 블록 */
+  const leaderLabel = t('strategy.grid.leaderLabel');
+  const leaderAdd   = t('strategy.grid.leaderAdd');
+  const memberAdd   = t('strategy.grid.memberAdd');
+  const slotEmpty   = t('strategy.grid.slotEmpty');
+
+  let heroBlock: string;
+  if (!leader) {
+    heroBlock = `<div class="st-hero-block"><div class="st-rep-empty">${escHtml(slotEmpty)}</div></div>`;
+  } else if (leader.kingshot_id) {
+    heroBlock = `
+      <div class="st-hero-block" data-assignment-id="${leader.id}" ${adminAttr}>
+        <div class="st-card-num ${badgeCls}">${order}</div>
+        <div class="st-rep-label">${escHtml(leaderLabel)}</div>
+        ${avatarHtml(leader.avatar_url, leader.nickname, 'lg')}
+        <div class="st-rep-name">${escHtml(leader.nickname ?? '')}</div>
+        ${leader.city_level ? `<div class="st-rep-tc">TC ${leader.city_level}</div>` : ''}
+        ${isAdmin ? '<div class="st-drag-hint" aria-hidden="true"><svg width="8" height="14" viewBox="0 0 8 14" fill="currentColor"><circle cx="2" cy="2" r="1.5"/><circle cx="6" cy="2" r="1.5"/><circle cx="2" cy="7" r="1.5"/><circle cx="6" cy="7" r="1.5"/><circle cx="2" cy="12" r="1.5"/><circle cx="6" cy="12" r="1.5"/></svg></div>' : ''}
+      </div>`;
+  } else {
+    /* 배정 없음 — 등록 버튼 (인증 사용자 모두에게 표시, 저장은 EF에서 권한 체크) */
+    heroBlock = `
+      <div class="st-hero-block" data-assignment-id="${leader.id}">
+        <div class="st-card-num ${badgeCls}">${order}</div>
+        <div class="st-rep-label">${escHtml(leaderLabel)}</div>
+        <button type="button" class="st-rep-add-btn" data-id="${leader.id}" aria-label="${escHtml(leaderAdd)}">${plusSvg(26)}</button>
+        <span class="st-rep-hint">${escHtml(leaderAdd)}</span>
+      </div>`;
+  }
+
+  /* 집결원 목록 */
+  const memberRows = members.map((m) => {
+    if (!m.kingshot_id) return ''; // 빈 슬롯은 렌더 안 함 (어드민 버튼으로 대체)
+    return `
+      <div class="st-member" data-assignment-id="${m.id}" ${adminAttr}>
+        ${avatarHtml(m.avatar_url, m.nickname, 'sm')}
+        <span class="st-member-name">${escHtml(m.nickname ?? '')}</span>
+        ${m.city_level ? `<span class="st-member-tc">TC ${m.city_level}</span>` : ''}
+        ${isAdmin ? '<div class="st-drag-hint" aria-hidden="true"><svg width="8" height="12" viewBox="0 0 8 12" fill="currentColor"><circle cx="2" cy="2" r="1.5"/><circle cx="6" cy="2" r="1.5"/><circle cx="2" cy="6" r="1.5"/><circle cx="6" cy="6" r="1.5"/><circle cx="2" cy="10" r="1.5"/><circle cx="6" cy="10" r="1.5"/></svg></div>' : ''}
+      </div>`;
+  }).join('');
+
+  /* 집결원 등록 버튼 (인증 사용자 모두에게 표시) */
+  const addMemberBtn = `<button type="button" class="st-member-add-row" data-add-member="${escHtml(gid)}" aria-label="${escHtml(memberAdd)}">
+       <div class="st-member-add-icon">${plusSvg(12)}</div>
+       ${escHtml(memberAdd)}
+     </button>`;
+
+  return `
+    <div class="st-col">
+      <div class="st-card">
+        ${heroBlock}
+        <div class="st-members">
+          ${memberRows}
+          ${addMemberBtn}
+        </div>
+      </div>
+    </div>`;
+}
+
+// ── 상세보기 다이얼로그 ──────────────────────────────────────────
+const detailDialog     = document.getElementById('st-detail-dialog')   as HTMLDialogElement;
+const detailCloseBtn   = document.getElementById('st-detail-close')!;
+const detailAvEl       = document.getElementById('st-detail-av')!;
+const detailNickEl     = document.getElementById('st-detail-nickname')!;
+const detailIdEl       = document.getElementById('st-detail-id')!;
+const detailTcEl       = document.getElementById('st-detail-tc')!;
+const detailAllianceEl = document.getElementById('st-detail-alliance')!;
+const detailPowerEl    = document.getElementById('st-detail-power')!;
+const detailEditBtn    = document.getElementById('st-detail-edit-btn') as HTMLButtonElement;
+
+function openDetailDialog(assignmentId: number) {
+  const a = assignments.find((x) => x.id === assignmentId);
+  if (!a?.kingshot_id) return;
+  detailAssignmentId = assignmentId;
+
+  const ini = initial(a.nickname);
+  if (a.avatar_url) {
+    detailAvEl.innerHTML = `<img src="${escHtml(a.avatar_url)}" width="72" height="72" alt="${escHtml(a.nickname ?? '')}" onerror="this.parentElement.textContent='${escHtml(ini)}'">`;
+  } else {
+    detailAvEl.textContent = ini;
+  }
+  detailNickEl.textContent    = a.nickname ?? '-';
+  detailIdEl.textContent      = a.kingshot_id;
+  detailTcEl.textContent      = a.city_level ? `TC ${a.city_level}` : '-';
+  detailAllianceEl.textContent = a.alliance_abbr ?? '-';
+  detailPowerEl.textContent   = a.power ? a.power.toLocaleString() : '-';
+
+  detailEditBtn.hidden = !isAdmin;
+  detailDialog.showModal();
+}
+
+function closeDetailDialog() {
+  if (detailDialog.open) detailDialog.close();
+  detailAssignmentId = null;
+}
+
+detailCloseBtn.addEventListener('click', closeDetailDialog);
+detailDialog.addEventListener('click', (e) => { if (e.target === detailDialog) closeDetailDialog(); });
+detailEditBtn.addEventListener('click', () => {
+  const id = detailAssignmentId;
+  closeDetailDialog();
+  if (id !== null) openEditDialog(id);
+});
+
+// ── 편집 다이얼로그 ──────────────────────────────────────────────
+const posDialog      = document.getElementById('st-pos-dialog')      as HTMLDialogElement;
 const posDialogTitle = document.getElementById('st-pos-dialog-title')!;
 const posDialogClose = document.getElementById('st-pos-dialog-close')!;
-const posPhaseId    = document.getElementById('st-pos-phase-id')!;
-const posPhaseConf  = document.getElementById('st-pos-phase-confirm')!;
-const posIdInput    = document.getElementById('st-pos-id-input')    as HTMLInputElement;
-const posLookupBtn  = document.getElementById('st-pos-lookup-btn')  as HTMLButtonElement;
-const posIdStatus   = document.getElementById('st-pos-id-status')!;
-const posPreviewAv  = document.getElementById('st-pos-preview-avatar')!;
-const posPreviewNm  = document.getElementById('st-pos-preview-name')!;
-const posPreviewTc  = document.getElementById('st-pos-preview-tc')!;
-const posConfStatus = document.getElementById('st-pos-confirm-status')!;
-const posClearBtn   = document.getElementById('st-pos-clear-btn')   as HTMLButtonElement;
-const posBackBtn    = document.getElementById('st-pos-back-btn')    as HTMLButtonElement;
-const posSaveBtn    = document.getElementById('st-pos-save-btn')    as HTMLButtonElement;
+const posPhaseView   = document.getElementById('st-pos-phase-view')!;
+const posViewAvatar  = document.getElementById('st-pos-view-avatar')!;
+const posViewName    = document.getElementById('st-pos-view-name')!;
+const posViewTc      = document.getElementById('st-pos-view-tc')!;
+const posViewStatus  = document.getElementById('st-pos-view-status')!;
+const posRemoveBtn   = document.getElementById('st-pos-remove-btn') as HTMLButtonElement;
+const posChangeBtn   = document.getElementById('st-pos-change-btn') as HTMLButtonElement;
+const posPhaseId     = document.getElementById('st-pos-phase-id')!;
+const posPhaseConf   = document.getElementById('st-pos-phase-confirm')!;
+const posIdInput     = document.getElementById('st-pos-id-input')    as HTMLInputElement;
+const posLookupBtn   = document.getElementById('st-pos-lookup-btn')  as HTMLButtonElement;
+const posIdStatus    = document.getElementById('st-pos-id-status')!;
+const posPreviewAv   = document.getElementById('st-pos-preview-avatar')!;
+const posPreviewNm   = document.getElementById('st-pos-preview-name')!;
+const posPreviewTc   = document.getElementById('st-pos-preview-tc')!;
+const posConfStatus  = document.getElementById('st-pos-confirm-status')!;
+const posBackBtn     = document.getElementById('st-pos-back-btn')    as HTMLButtonElement;
+const posSaveBtn     = document.getElementById('st-pos-save-btn')    as HTMLButtonElement;
 
 function openEditDialog(assignmentId: number) {
   const a = assignments.find((x) => x.id === assignmentId);
   if (!a) return;
-  editingId = assignmentId;
+  editingId     = assignmentId;
   pendingLookup = null;
 
-  const isLeader = a.is_leader;
-  posDialogTitle.textContent = isLeader ? '집결장 편집' : '집결원 편집';
+  const isLeaderSlot = a.is_leader;
+  posDialogTitle.textContent = isLeaderSlot ? t('strategy.dialog.titleLeader') : t('strategy.dialog.titleMember');
+  posIdStatus.textContent     = '';
+  posConfStatus.textContent   = '';
+  setStatus(posViewStatus, '');
 
-  // reset
-  posIdInput.value = a.kingshot_id ?? '';
-  posIdStatus.textContent = '';
-  posConfStatus.textContent = '';
-  posPhaseId.hidden   = false;
-  posPhaseConf.hidden = true;
+  // 포지션 비우기 — 어드민만
+  posRemoveBtn.hidden = !isAdmin;
+
+  if (a.kingshot_id) {
+    // 채워진 슬롯 → Phase 0 (현재 배정 보기)
+    const ini = initial(a.nickname);
+    if (a.avatar_url) {
+      posViewAvatar.innerHTML = `<img src="${escHtml(a.avatar_url)}" width="48" height="48" onerror="this.parentElement.textContent='${escHtml(ini)}'">`;
+    } else {
+      posViewAvatar.textContent = ini;
+    }
+    posViewName.textContent = a.nickname ?? '-';
+    const tcPart = a.city_level ? `TC ${a.city_level}` : '';
+    const idPart = a.kingshot_id ?? '';
+    posViewTc.textContent = [tcPart, idPart].filter(Boolean).join(' · ');
+
+    posPhaseView.hidden    = false;
+    posPhaseId.hidden      = true;
+    posPhaseConf.hidden    = true;
+  } else {
+    // 빈 슬롯 → Phase 1 (ID 입력)
+    posIdInput.value = '';
+    posPhaseView.hidden    = true;
+    posPhaseId.hidden      = false;
+    posPhaseConf.hidden    = true;
+  }
 
   posDialog.showModal();
-  setTimeout(() => posIdInput.focus(), 50);
+  if (!a.kingshot_id) setTimeout(() => posIdInput.focus(), 50);
 }
 
 function closeEditDialog() {
@@ -338,7 +628,7 @@ function closeEditDialog() {
 
 function setStatus(el: HTMLElement, msg: string, tone: '' | 'err' | 'ok' = '') {
   el.textContent = msg;
-  el.className = 'st-pos-status' + (tone ? ' is-' + tone : '');
+  el.className   = 'st-pos-status' + (tone ? ' is-' + tone : '');
 }
 
 async function onLookup() {
@@ -353,16 +643,16 @@ async function onLookup() {
     const res = await callFn({ action: 'lookup-player', player_id: pid });
     if (!res.ok) {
       const msgs: Record<string, string> = {
-        player_not_found: '해당 킹샷 ID 를 찾을 수 없습니다.',
+        player_not_found:  '해당 킹샷 ID 를 찾을 수 없습니다.',
         invalid_player_id: '유효하지 않은 킹샷 ID 입니다.',
       };
       setStatus(posIdStatus, msgs[res.error] ?? '조회 실패. 다시 시도해 주세요.', 'err');
       return;
     }
-    pendingLookup = { nickname: res.nickname, avatar_url: res.avatar_url, city_level: res.city_level };
+    pendingLookup = { nickname: res.nickname, avatar_url: res.avatar_url, city_level: res.city_level, power: res.power ?? null, alliance_abbr: res.alliance_abbr ?? null };
     const ini = initial(res.nickname);
     if (res.avatar_url) {
-      posPreviewAv.innerHTML = `<img src="${res.avatar_url}" width="48" height="48" onerror="this.parentElement.textContent='${ini}'" />`;
+      posPreviewAv.innerHTML = `<img src="${escHtml(res.avatar_url)}" width="48" height="48" onerror="this.parentElement.textContent='${escHtml(ini)}'">`;
     } else {
       posPreviewAv.textContent = ini;
     }
@@ -377,19 +667,25 @@ async function onLookup() {
 }
 
 async function onSave() {
-  if (editingId === null || !pendingLookup || !authToken) return;
+  if (editingId === null || !pendingLookup) return;
+  if (!authToken) {
+    setStatus(posConfStatus, '로그인 후 이용할 수 있습니다.', 'err');
+    return;
+  }
   posSaveBtn.disabled = true;
   setStatus(posConfStatus, '저장 중…');
   try {
     const pid = posIdInput.value.trim();
     const res = await callFn({
-      action:      'upsert-position',
-      token:       authToken,
-      id:          editingId,
-      kingshot_id: pid,
-      nickname:    pendingLookup.nickname,
-      avatar_url:  pendingLookup.avatar_url,
-      city_level:  pendingLookup.city_level,
+      action:        'upsert-position',
+      token:         authToken,
+      id:            editingId,
+      kingshot_id:   pid,
+      nickname:      pendingLookup.nickname,
+      avatar_url:    pendingLookup.avatar_url,
+      city_level:    pendingLookup.city_level,
+      power:         pendingLookup.power,
+      alliance_abbr: pendingLookup.alliance_abbr,
     });
     if (!res.ok) {
       const msgs: Record<string, string> = {
@@ -408,45 +704,18 @@ async function onSave() {
 
 async function onClear() {
   if (editingId === null || !authToken) return;
-  posClearBtn.disabled = true;
-  setStatus(posConfStatus, '처리 중…');
+  posRemoveBtn.disabled = true;
+  setStatus(posViewStatus, '처리 중…');
   try {
-    const res = await callFn({
-      action: 'clear-position',
-      token:  authToken,
-      id:     editingId,
-    });
-    if (!res.ok) {
-      setStatus(posConfStatus, '실패. 다시 시도해 주세요.', 'err');
-      return;
-    }
+    const res = await callFn({ action: 'clear-position', token: authToken, id: editingId });
+    if (!res.ok) { setStatus(posViewStatus, '실패. 다시 시도해 주세요.', 'err'); return; }
     closeEditDialog();
     await reloadData();
   } finally {
-    posClearBtn.disabled = false;
+    posRemoveBtn.disabled = false;
   }
 }
 
-function setupEditHandlers() {
-  document.querySelectorAll<HTMLButtonElement>('.st-edit-btn, .st-member-edit-btn').forEach((btn) => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const id = Number(btn.dataset.id);
-      openEditDialog(id);
-    });
-  });
-
-  // 클릭으로도 열리도록 (빈 슬롯 등)
-  document.querySelectorAll<HTMLElement>('[data-assignment-id]').forEach((el) => {
-    el.addEventListener('click', (e) => {
-      // 이미 버튼 클릭으로 열린 경우 중복 방지
-      if ((e.target as HTMLElement).closest('.st-edit-btn, .st-member-edit-btn, .st-drag-handle')) return;
-      openEditDialog(Number(el.dataset.assignmentId));
-    });
-  });
-}
-
-// 다이얼로그 이벤트 바인딩
 posDialogClose.addEventListener('click', closeEditDialog);
 posDialog.addEventListener('click', (e) => { if (e.target === posDialog) closeEditDialog(); });
 posLookupBtn.addEventListener('click', onLookup);
@@ -457,83 +726,394 @@ posBackBtn.addEventListener('click', () => {
   setStatus(posConfStatus, '');
 });
 posSaveBtn.addEventListener('click', onSave);
-posClearBtn.addEventListener('click', onClear);
 
-// ── 드래그 & 드롭 ─────────────────────────────────────────────
-function setupDragDrop() {
-  const draggables = document.querySelectorAll<HTMLElement>('[data-assignment-id][draggable="true"]');
+// Phase 0: 포지션 비우기 버튼
+posRemoveBtn.addEventListener('click', onClear);
 
-  draggables.forEach((el) => {
-    el.addEventListener('dragstart', (e) => {
-      dragSourceId = Number(el.dataset.assignmentId);
-      el.classList.add('is-dragging');
-      e.dataTransfer!.effectAllowed = 'move';
-      e.dataTransfer!.setData('text/plain', String(dragSourceId));
+// Phase 0: 변경하기 버튼 → Phase 1
+posChangeBtn.addEventListener('click', () => {
+  posIdInput.value    = '';
+  posIdStatus.textContent = '';
+  posPhaseView.hidden = true;
+  posPhaseId.hidden   = false;
+  setTimeout(() => posIdInput.focus(), 50);
+});
+
+// ── 이벤트 위임: 편집 클릭 ───────────────────────────────────────
+function setupEditHandlers() {
+  // 집결원 등록 버튼
+  flowGrid.querySelectorAll<HTMLButtonElement>('[data-add-member]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const gid      = btn.dataset.addMember!;
+      const emptySlot = assignments.find(
+        (a) => a.group_id === gid && !a.is_leader && !a.kingshot_id,
+      );
+      if (!emptySlot) { alert('배정 가능한 슬롯이 없습니다.'); return; }
+      openEditDialog(emptySlot.id);
     });
+  });
 
-    el.addEventListener('dragend', () => {
-      el.classList.remove('is-dragging');
-      document.querySelectorAll('.is-drag-over').forEach((t) => t.classList.remove('is-drag-over'));
+  // 집결장 등록 버튼 (빈 프레임)
+  flowGrid.querySelectorAll<HTMLButtonElement>('[data-id].st-rep-add-btn').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openEditDialog(Number(btn.dataset.id));
     });
+  });
 
-    el.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      e.dataTransfer!.dropEffect = 'move';
-      const targetId = Number(el.dataset.assignmentId);
-      if (dragSourceId !== null && dragSourceId !== targetId) {
-        el.classList.add('is-drag-over');
-      }
-    });
-
-    el.addEventListener('dragleave', () => {
-      el.classList.remove('is-drag-over');
-    });
-
-    el.addEventListener('drop', async (e) => {
-      e.preventDefault();
-      el.classList.remove('is-drag-over');
-      const targetId = Number(el.dataset.assignmentId);
-      if (dragSourceId === null || dragSourceId === targetId) return;
-      if (!authToken) return;
-
-      const res = await callFn({
-        action: 'swap-positions',
-        token:  authToken,
-        id_a:   dragSourceId,
-        id_b:   targetId,
-      });
-
-      dragSourceId = null;
-      if (res.ok) {
-        await reloadData();
-      }
+  // 배정된 카드 클릭 → 상세보기 다이얼로그 (모든 인증 사용자)
+  flowGrid.querySelectorAll<HTMLElement>('[data-assignment-id]').forEach((el) => {
+    const a = assignments.find((x) => x.id === Number(el.dataset.assignmentId));
+    if (!a?.kingshot_id) return; // 빈 슬롯은 스킵
+    el.addEventListener('click', (e) => {
+      if ((e.target as HTMLElement).closest('.st-rep-add-btn,.st-member-add-row')) return;
+      openDetailDialog(Number(el.dataset.assignmentId));
     });
   });
 }
 
-// ── 데이터 로드 ───────────────────────────────────────────────
-async function reloadData() {
-  setLoading(true);
-  try {
-    assignments = await fetchAssignments();
-  } catch {
-    assignments = [];
-  } finally {
-    setLoading(false);
-  }
-  renderGrid();
+// ── 드래그 & 드롭 ────────────────────────────────────────────────
+function setupDragDrop() {
+  // 드래그 소스: 채워진 카드만
+  flowGrid.querySelectorAll<HTMLElement>('[data-assignment-id][draggable="true"]').forEach((el) => {
+    el.addEventListener('dragstart', (e) => {
+      dragSourceId = Number(el.dataset.assignmentId);
+      el.classList.add('is-dragging');
+      e.dataTransfer!.effectAllowed = 'move';
+    });
+    el.addEventListener('dragend', () => {
+      el.classList.remove('is-dragging');
+      flowGrid.querySelectorAll('.is-drag-over').forEach((t) => t.classList.remove('is-drag-over'));
+    });
+  });
+
+  // 드롭 타겟: 채워진 슬롯 + 빈 슬롯 모두
+  flowGrid.querySelectorAll<HTMLElement>('[data-assignment-id]').forEach((el) => {
+    el.addEventListener('dragover', (e) => {
+      if (dragSourceId === null) return;
+      e.preventDefault();
+      e.dataTransfer!.dropEffect = 'move';
+      if (dragSourceId !== Number(el.dataset.assignmentId)) {
+        el.classList.add('is-drag-over');
+      }
+    });
+    el.addEventListener('dragleave', (e) => {
+      // 자식 요소로 이동 시 오발 방지
+      if (!el.contains(e.relatedTarget as Node)) {
+        el.classList.remove('is-drag-over');
+      }
+    });
+    el.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      el.classList.remove('is-drag-over');
+      const targetId = Number(el.dataset.assignmentId);
+      if (dragSourceId === null || dragSourceId === targetId || !authToken) return;
+      const srcId = dragSourceId;
+      dragSourceId = null;
+      const res = await callFn({ action: 'swap-positions', token: authToken, id_a: srcId, id_b: targetId });
+      if (res.ok) await reloadData();
+    });
+  });
 }
 
-// ── 접근 검증 + 초기화 ────────────────────────────────────────
-async function verifyAndInit() {
-  if (!authRecord || !authToken) {
-    showGate();
+// ── 포지션 전체 갱신 (어드민) ────────────────────────────────────
+const refreshBtn = document.getElementById('st-refresh-btn') as HTMLButtonElement;
+
+async function onRefreshPositions() {
+  if (!authToken) return;
+  refreshBtn.disabled = true;
+  const svgIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>`;
+  refreshBtn.innerHTML = svgIcon + '갱신 중…';
+  try {
+    const res = await callFn({ action: 'refresh-all-positions', token: authToken });
+    if (res.ok) {
+      await reloadData();
+      alert(`갱신 완료 (${res.refreshed}명${res.failed ? ` / 실패 ${res.failed}명` : ''})`);
+    } else {
+      alert('갱신 실패: ' + (res.error ?? 'unknown'));
+    }
+  } finally {
+    refreshBtn.disabled = false;
+    refreshBtn.innerHTML = svgIcon + '포지션 갱신';
+  }
+}
+
+refreshBtn.addEventListener('click', onRefreshPositions);
+
+// ── 데이터 로드 ──────────────────────────────────────────────────
+async function reloadData() {
+  setLoading(true);
+  try { assignments = await fetchAssignments(); }
+  catch { assignments = []; }
+  finally { setLoading(false); }
+  renderFlowGrid();
+}
+
+// ── 채팅 ────────────────────────────────────────────────────────
+const chatMsgsEl     = document.getElementById('st-chat-messages')!;
+const chatNoticeEl   = document.getElementById('st-chat-notice')!;
+const chatInputArea  = document.getElementById('st-chat-input-area')!;
+const chatTextarea   = document.getElementById('st-chat-textarea')   as HTMLTextAreaElement;
+const chatSendBtn    = document.getElementById('st-chat-send-btn')   as HTMLButtonElement;
+const chatCooldownEl = document.getElementById('st-chat-cooldown')!;
+
+function isScrolledToBottom(): boolean {
+  const el = chatMsgsEl;
+  return el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+}
+
+function scrollChatBottom(force = false) {
+  if (force || isScrolledToBottom()) {
+    chatMsgsEl.scrollTop = chatMsgsEl.scrollHeight;
+  }
+}
+
+function maybeInsertDateDivider(iso: string) {
+  const d = fmtDate(iso);
+  if (d !== lastChatDate) {
+    lastChatDate = d;
+    const div = document.createElement('div');
+    div.className = 'st-chat-date';
+    div.textContent = d;
+    chatMsgsEl.appendChild(div);
+  }
+}
+
+function createChatRow(message: string, time: string, mine: boolean): HTMLElement {
+  const row = document.createElement('div');
+  row.className = 'st-chat-row';
+
+  const bubble = document.createElement('div');
+  bubble.className = 'st-chat-bubble';
+  bubble.textContent = message;
+
+  const timeEl = document.createElement('span');
+  timeEl.className = 'st-chat-time';
+  timeEl.textContent = time;
+
+  // 내 메시지: 시간 왼쪽, 버블 오른쪽 (row-reverse 로 처리됨)
+  row.appendChild(timeEl);
+  row.appendChild(bubble);
+
+  return row;
+}
+
+function createChatGroup(msg: ChatMessage, mine: boolean, showAv: boolean): HTMLElement {
+  const group = document.createElement('div');
+  group.className = `st-chat-grp${mine ? ' is-mine' : ''}`;
+  group.dataset.kid = msg.kingshot_id;
+  group.dataset.lastTime = String(new Date(msg.created_at).getTime());
+
+  if (!mine) {
+    if (showAv) {
+      const av = document.createElement('div');
+      av.className = 'st-chat-av';
+      if (msg.avatar_url) {
+        av.innerHTML = `<img src="${escHtml(msg.avatar_url)}" width="34" height="34">`;
+      } else {
+        av.textContent = initial(msg.nickname);
+      }
+      group.appendChild(av);
+    } else {
+      const placeholder = document.createElement('div');
+      placeholder.className = 'st-chat-av-empty';
+      group.appendChild(placeholder);
+    }
+  }
+
+  const body = document.createElement('div');
+  body.className = 'st-chat-grp-body';
+
+  if (!mine && showAv) {
+    const nick = document.createElement('div');
+    nick.className = 'st-chat-nick';
+    nick.textContent = msg.nickname;
+    body.appendChild(nick);
+  }
+
+  body.appendChild(createChatRow(msg.message, fmtTime(msg.created_at), mine));
+  group.appendChild(body);
+  return group;
+}
+
+function appendChatMessage(msg: ChatMessage) {
+  const mine     = msg.kingshot_id === authRecord?.kingshot_id;
+  const atBottom = isScrolledToBottom();
+
+  maybeInsertDateDivider(msg.created_at);
+
+  const msgTime  = new Date(msg.created_at).getTime();
+  const lastTime = lastChatGroup ? Number(lastChatGroup.dataset.lastTime) : 0;
+  const canGroup = lastChatKid === msg.kingshot_id
+    && (msgTime - lastTime) < 5 * 60 * 1000;
+
+  if (canGroup && lastChatGroup) {
+    // 기존 그룹에 버블 추가
+    const body = lastChatGroup.querySelector('.st-chat-grp-body')!;
+    body.appendChild(createChatRow(msg.message, fmtTime(msg.created_at), mine));
+    lastChatGroup.dataset.lastTime = String(msgTime);
+  } else {
+    // 새 그룹 생성
+    const group = createChatGroup(msg, mine, true);
+    chatMsgsEl.appendChild(group);
+    lastChatGroup = group;
+    lastChatKid   = msg.kingshot_id;
+  }
+
+  if (atBottom || mine) scrollChatBottom(true);
+}
+
+async function loadChatHistory() {
+  try {
+    const res = await callFn({ action: 'chat-fetch' });
+    if (!res.ok || !Array.isArray(res.messages)) return;
+    lastChatDate = '';
+    chatMsgsEl.innerHTML = '';
+    lastChatKid   = '';
+    lastChatGroup = null;
+    for (const m of res.messages) appendChatMessage(m);
+    scrollChatBottom(true);
+  } catch { /* 채팅 초기 로드 실패는 무시 */ }
+}
+
+// 레이트리밋 쿨다운 타이머
+function startCooldownTimer(endMs: number) {
+  if (cdTimerId) clearInterval(cdTimerId);
+  updateCooldownUI(endMs);
+  cdTimerId = setInterval(() => updateCooldownUI(endMs), 1000);
+}
+
+function updateCooldownUI(endMs: number) {
+  const remaining = Math.ceil((endMs - Date.now()) / 1000);
+  if (remaining <= 0) {
+    if (cdTimerId) { clearInterval(cdTimerId); cdTimerId = null; }
+    chatCooldownEl.textContent   = '';
+    chatTextarea.disabled        = false;
+    chatSendBtn.disabled         = false;
+    chatTextarea.placeholder     = t('strategy.chat.placeholder');
     return;
   }
+  const m = Math.floor(remaining / 60);
+  const s = remaining % 60;
+  chatCooldownEl.textContent   = m > 0
+    ? t('strategy.chat.cooldownMinSec', { m: String(m), s: s.toString().padStart(2, '0') })
+    : t('strategy.chat.cooldownSec', { s: String(s) });
+  chatTextarea.disabled        = true;
+  chatSendBtn.disabled         = true;
+  chatTextarea.placeholder     = t('strategy.chat.cooldownPlaceholder');
+}
+
+function checkCooldown() {
+  const stored = localStorage.getItem(CHAT_CD_KEY);
+  if (!stored) return;
+  const endMs = Number(stored);
+  if (isNaN(endMs) || endMs <= Date.now()) {
+    localStorage.removeItem(CHAT_CD_KEY);
+    return;
+  }
+  startCooldownTimer(endMs);
+}
+
+function setCooldown(retryAfterSec: number) {
+  const endMs = Date.now() + retryAfterSec * 1000;
+  localStorage.setItem(CHAT_CD_KEY, String(endMs));
+  startCooldownTimer(endMs);
+}
+
+async function onChatSend() {
+  if (!authToken) return;
+  const text = chatTextarea.value.trim();
+  if (!text) return;
+
+  // 클라이언트 레이트리밋 확인
+  const stored = localStorage.getItem(CHAT_CD_KEY);
+  if (stored) {
+    const endMs = Number(stored);
+    if (!isNaN(endMs) && endMs > Date.now()) {
+      startCooldownTimer(endMs);
+      return;
+    }
+  }
+
+  chatSendBtn.disabled  = true;
+  chatTextarea.disabled = true;
+
+  try {
+    const res = await callFn({ action: 'chat-send', token: authToken, message: text });
+    if (!res.ok) {
+      if (res.error === 'rate_limited') {
+        setCooldown(res.retry_after ?? 300);
+      }
+      // 실패해도 textarea 복구 (finally에서 처리)
+      return;
+    }
+
+    // 전송 성공 — 즉시 UI에 추가 (Realtime 도달 전에 보여주기)
+    if (res.message) {
+      recentSentIds.add(res.message.id); // Realtime 중복 방지용 id 등록
+      appendChatMessage(res.message);
+    }
+
+    chatTextarea.value = '';
+    chatTextarea.style.height = 'auto';
+    // 5분 쿨다운 시작
+    setCooldown(CHAT_LIMIT_MS / 1000);
+  } catch { /* 전송 실패 무시 */ }
+  finally {
+    // 쿨다운이 걸려있지 않으면 버튼 복구
+    const cd = localStorage.getItem(CHAT_CD_KEY);
+    if (!cd || Number(cd) <= Date.now()) {
+      chatSendBtn.disabled  = false;
+      chatTextarea.disabled = false;
+    }
+  }
+}
+
+chatSendBtn.addEventListener('click', onChatSend);
+chatTextarea.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onChatSend(); }
+});
+
+// 자동 높이 조절
+chatTextarea.addEventListener('input', () => {
+  chatTextarea.style.height = 'auto';
+  chatTextarea.style.height = Math.min(chatTextarea.scrollHeight, 80) + 'px';
+});
+
+// ── Supabase Realtime 채팅 구독 ──────────────────────────────────
+let chatChannel: ReturnType<typeof supabase.channel> | null = null;
+
+function subscribeChatRealtime() {
+  if (chatChannel) return;
+  chatChannel = supabase
+    .channel('strategy-chat-rt')
+    .on(
+      'postgres_changes' as any,
+      { event: 'INSERT', schema: 'public', table: 'strategy_chat' },
+      (payload: any) => {
+        const msg = payload.new as ChatMessage;
+        // 이미 즉시 추가한 내 메시지 — 중복 스킵
+        if (recentSentIds.has(msg.id)) {
+          recentSentIds.delete(msg.id);
+          return;
+        }
+        appendChatMessage(msg);
+      },
+    )
+    .subscribe();
+}
+
+function unsubscribeChatRealtime() {
+  if (chatChannel) { supabase.removeChannel(chatChannel); chatChannel = null; }
+}
+
+// ── 인증 흐름 ────────────────────────────────────────────────────
+async function verifyAndInit() {
+  if (!authRecord || !authToken) { showGate(); return; }
 
   gateStatus.textContent = '접근 권한 확인 중…';
   gateStatus.hidden = false;
-  gate.hidden = false;
+  gateEl.hidden     = false;
 
   let res: any;
   try {
@@ -553,13 +1133,22 @@ async function verifyAndInit() {
     return;
   }
 
-  let adminCheck = false;
-  try {
-    adminCheck = await checkAdmin(authRecord.kingshot_id);
-  } catch { /* 관리자 조회 실패해도 뷰어로 계속 */ }
-  isAdmin = adminCheck;
+  try { isAdmin = await checkAdmin(authRecord.kingshot_id); }
+  catch { isAdmin = false; }
 
+  refreshBtn.hidden = !isAdmin;
   showMain();
+
+  // 채팅 UI
+  chatNoticeEl.hidden  = true;
+  chatInputArea.hidden = false;
+  checkCooldown();
+
+  // 채팅 초기 로드 + Realtime 구독
+  await loadChatHistory();
+  subscribeChatRealtime();
+
+  // 전략 배정 로드
   await reloadData();
 }
 
@@ -570,29 +1159,45 @@ async function init() {
 
   if (!authRecord || !authToken) {
     showGate();
+    // 미인증에도 채팅은 읽기 전용 표시
+    chatNoticeEl.hidden  = false;
+    chatInputArea.hidden = true;
+    await loadChatHistory();
+    subscribeChatRealtime();
     return;
   }
+
   await verifyAndInit();
 }
 
-// 로그인 버튼 → 인증 다이얼로그 열기
-gateBtn.addEventListener('click', () => {
+gateBtnEl.addEventListener('click', () => {
   document.dispatchEvent(new CustomEvent('app-open-auth'));
 });
 
-// 인증 완료 이벤트
-document.addEventListener('app-auth-changed', () => {
+document.addEventListener('app-auth-changed', async () => {
   const auth = readAuth();
   authRecord = auth?.record ?? null;
   authToken  = auth?.token  ?? null;
   if (authRecord && authToken) {
-    verifyAndInit();
+    await verifyAndInit();
   } else {
     showGate();
     isAdmin = false;
+    refreshBtn.hidden    = true;
+    chatNoticeEl.hidden  = false;
+    chatInputArea.hidden = true;
+    unsubscribeChatRealtime();
   }
 });
 
-// 페이지 로드
+// 페이지 언로드 시 Realtime 정리
+window.addEventListener('beforeunload', unsubscribeChatRealtime);
+
+// 언어 변경 시 동적으로 생성된 그리드 콘텐츠 재렌더
+onLangChange(() => {
+  if (assignments.length > 0) renderFlowGrid();
+  // 시나리오 설명 텍스트 갱신 (data-i18n 속성은 setScenario 에서 이미 설정됨 → applyTranslations 가 처리)
+});
+
 init();
 </script>

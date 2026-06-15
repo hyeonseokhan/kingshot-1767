@@ -40,12 +40,18 @@ const corsHeaders = {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
-// 게임 공식 player 조회 API — centurygame 의 endpoint. redeem-coupon 과 동일 SECRET/sign 패턴.
+// ── v1: 게임 공식 player 조회 API ────────────────────────────────────
+// centurygame endpoint. redeem-coupon 과 동일 SECRET/sign 패턴.
 // 이전 구현은 redeem-coupon Edge Function 을 proxy 호출했으나, internal Edge Function 간
 // fetch 가 silent fail 하는 케이스 발생 (270680423 lookup 이 player_not_found 반환) →
 // 직접 호출로 전환해 의존성 제거. SECRET 은 redeem-coupon 과 동일 (동일 endpoint).
 const KS_API_BASE = "https://kingshot-giftcode.centurygame.com/api";
 const KS_API_SECRET = "mN4!pQs6JrYwV9";
+
+// ── v2: 커뮤니티 트래커 API ──────────────────────────────────────────
+// kingshot.jeab.dev — 인증 없음, GET 단순 호출.
+// city_level 은 town_hall_level 로 대체 (v1 stove_lv 보다 정확함을 확인).
+const JEAB_API_BASE = "https://kingshot.jeab.dev";
 
 const dbHeaders: Record<string, string> = {
   apikey: SERVICE_KEY,
@@ -196,11 +202,31 @@ function extractRequestMeta(
   return { ip, country, platform };
 }
 
+// ── v1 PlayerInfo 인터페이스 (원본 유지) ─────────────────────────────
 interface PlayerInfo {
   fid: string;
   nickname: string;
   avatar_image: string | null;
   city_level: number | null;
+}
+
+// ── v2 PlayerInfoV2 인터페이스 ───────────────────────────────────────
+// PlayerInfo 와 동일한 핵심 필드 + v2 확장 필드.
+// city_level 은 v2 town_hall_level 을 그대로 매핑.
+interface PlayerInfoV2 extends PlayerInfo {
+  state: number | null;
+  power: number | null;
+  life_tree_level: number | null;
+  alliance_id: number | null;
+  alliance_abbr: string | null;
+  alliance_name: string | null;
+  alliance_rank: number | null;
+  mystic_trial_score: number | null;
+  mystic_trial_rank: number | null;
+  mystic_trial_kid: number | null;
+  mystic_trial_updated_ts: number | null;
+  v2_tag: string | null;
+  v2_last_refreshed_at: string | null;
 }
 
 /** TC(센터) 레벨 게이트 — 이 값 이상만 설문 참여 가능. */
@@ -261,31 +287,79 @@ async function fetchPlayerInfo(kingshotId: string): Promise<PlayerInfo | null> {
   }
 }
 
+/**
+ * v2 player 조회 — kingshot.jeab.dev/api/players/{id}.
+ * PlayerInfoV2 로 정규화하여 반환. 미등록·오류 시 null.
+ * avatar_url 은 JEAB_API_BASE prefix 를 붙여 절대 URL 로 변환.
+ */
+async function fetchPlayerInfoV2(kingshotId: string): Promise<PlayerInfoV2 | null> {
+  try {
+    const res = await fetch(`${JEAB_API_BASE}/api/players/${encodeURIComponent(kingshotId)}`);
+    if (!res.ok) return null;
+    const json = await res.json();
+    if (!json?.id) return null;
+    const avatarUrl = json.avatar_url ? `${JEAB_API_BASE}${json.avatar_url}` : null;
+    return {
+      fid:                      String(json.id),
+      nickname:                 json.username ?? "",
+      avatar_image:             avatarUrl,
+      city_level:               json.town_hall_level ?? null,
+      state:                    json.state              ?? null,
+      power:                    json.power              ?? null,
+      life_tree_level:          json.life_tree_level    ?? null,
+      alliance_id:              json.alliance_id        ?? null,
+      alliance_abbr:            json.alliance_abbr      ?? null,
+      alliance_name:            json.alliance_name      ?? null,
+      alliance_rank:            json.alliance_rank      ?? null,
+      mystic_trial_score:       json.mystic_trial_score ?? null,
+      mystic_trial_rank:        json.mystic_trial_rank  ?? null,
+      mystic_trial_kid:         json.mystic_trial_kid   ?? null,
+      mystic_trial_updated_ts:  json.mystic_trial_updated_ts ?? null,
+      v2_tag:                   json.tag                ?? null,
+      v2_last_refreshed_at:     json.last_refreshed_at  ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
 async function lookup(kingshotId: string) {
   if (!isValidKingshotId(kingshotId)) return { ok: false, error: "invalid_id" };
-  const player = await fetchPlayerInfo(kingshotId);
+  // v2 호출 (v1: fetchPlayerInfo 는 코드 유지)
+  const player = await fetchPlayerInfoV2(kingshotId);
   if (!player) return { ok: false, error: "player_not_found" };
   const existing = await dbSelectOne(
     `kvk_speedup_survey?kingshot_id=eq.${encodeURIComponent(kingshotId)}&select=kingshot_id`
   );
-  // 기존 등록자라면 lookup 시점에 nickname/avatar/city_level 즉시 sync —
-  // 사용자가 PIN/저장 단계까지 안 가도 (또는 city_level 미달로 차단돼도) 메타가 최신화돼
-  // list 필터(city_level >= 26) 가 정확히 반영됨. updated_at 은 손대지 않음
-  // (가속권 데이터 갱신 시점만 의미 있는 값이라 메타 sync 로 흔들지 않음).
+  // 기존 등록자라면 lookup 시점에 프로필 즉시 sync — v2 확장 필드 포함.
+  // updated_at 은 손대지 않음 (가속권 데이터 갱신 시점만 의미 있는 값).
   if (existing) {
     await dbPatch(`kvk_speedup_survey?kingshot_id=eq.${encodeURIComponent(kingshotId)}`, {
-      nickname: player.nickname,
-      avatar_url: player.avatar_image,
-      city_level: player.city_level,
+      nickname:                player.nickname,
+      avatar_url:              player.avatar_image,
+      city_level:              player.city_level,
+      state:                   player.state,
+      power:                   player.power,
+      life_tree_level:         player.life_tree_level,
+      alliance_id:             player.alliance_id,
+      alliance_abbr:           player.alliance_abbr,
+      alliance_name:           player.alliance_name,
+      alliance_rank:           player.alliance_rank,
+      mystic_trial_score:      player.mystic_trial_score,
+      mystic_trial_rank:       player.mystic_trial_rank,
+      mystic_trial_kid:        player.mystic_trial_kid,
+      mystic_trial_updated_ts: player.mystic_trial_updated_ts,
+      v2_tag:                  player.v2_tag,
+      v2_last_refreshed_at:    player.v2_last_refreshed_at,
     });
   }
   return {
     ok: true,
     player: {
       kingshot_id: player.fid,
-      nickname: player.nickname,
-      avatar_url: player.avatar_image,
-      city_level: player.city_level,
+      nickname:    player.nickname,
+      avatar_url:  player.avatar_image,
+      city_level:  player.city_level,
     },
     registered: !!existing,
   };
@@ -309,7 +383,8 @@ async function register(
     `kvk_speedup_survey?kingshot_id=eq.${encodeURIComponent(kingshotId)}&select=kingshot_id`
   );
   if (existing) return { ok: false, error: "already_registered" };
-  const player = await fetchPlayerInfo(kingshotId);
+  // v2 호출 (v1: fetchPlayerInfo 는 코드 유지)
+  const player = await fetchPlayerInfoV2(kingshotId);
   if (!player) return { ok: false, error: "player_not_found" };
   // 서버측 게이트 — 클라이언트 우회 차단. lookup 통과 후 register 까지 시간 차에
   // 강등됐을 가능성도 막음 (정상 시나리오는 변화 없음).
@@ -321,20 +396,33 @@ async function register(
   const token = newToken();
   const expiresAt = newExpiresAt();
   await dbInsert("kvk_speedup_survey", {
-    kingshot_id: kingshotId,
-    nickname: player.nickname,
-    avatar_url: player.avatar_image,
-    city_level: player.city_level,
-    pin_hash: hash,
-    pin_salt: salt,
-    training: training as number,
-    construction: construction as number,
-    general: general as number,
-    ip: meta.ip,
-    country: meta.country,
-    platform: meta.platform,
-    session_token: token,
-    session_expires_at: expiresAt,
+    kingshot_id:             kingshotId,
+    nickname:                player.nickname,
+    avatar_url:              player.avatar_image,
+    city_level:              player.city_level,
+    pin_hash:                hash,
+    pin_salt:                salt,
+    training:                training as number,
+    construction:            construction as number,
+    general:                 general as number,
+    ip:                      meta.ip,
+    country:                 meta.country,
+    platform:                meta.platform,
+    session_token:           token,
+    session_expires_at:      expiresAt,
+    state:                   player.state,
+    power:                   player.power,
+    life_tree_level:         player.life_tree_level,
+    alliance_id:             player.alliance_id,
+    alliance_abbr:           player.alliance_abbr,
+    alliance_name:           player.alliance_name,
+    alliance_rank:           player.alliance_rank,
+    mystic_trial_score:      player.mystic_trial_score,
+    mystic_trial_rank:       player.mystic_trial_rank,
+    mystic_trial_kid:        player.mystic_trial_kid,
+    mystic_trial_updated_ts: player.mystic_trial_updated_ts,
+    v2_tag:                  player.v2_tag,
+    v2_last_refreshed_at:    player.v2_last_refreshed_at,
   });
   return {
     ok: true,
@@ -504,24 +592,38 @@ async function updateRow(
   }
   const auth = await authenticate(opts);
   if (!auth.ok) return auth;
-  // 닉네임/아바타/city_level 모두 동기 — 게임 내 변경 시 자동 반영
-  const player = await fetchPlayerInfo(auth.kingshotId);
+  // 닉네임/아바타/city_level + v2 확장 필드 동기 — 게임 내 변경 시 자동 반영.
+  // v2 호출 (v1: fetchPlayerInfo 는 코드 유지)
+  const player = await fetchPlayerInfoV2(auth.kingshotId);
   if (!player) return { ok: false, error: "player_not_found" };
   // 서버측 게이트 — 강등된 사용자가 update 로 데이터 갱신하는 것 차단.
   if (player.city_level === null || player.city_level < MIN_CITY_LEVEL) {
     return { ok: false, error: "city_level_too_low", city_level: player.city_level };
   }
   const patch: Record<string, unknown> = {
-    nickname: player.nickname,
-    avatar_url: player.avatar_image,
-    city_level: player.city_level,
-    training: training as number,
-    construction: construction as number,
-    general: general as number,
-    ip: meta.ip,
-    country: meta.country,
-    platform: meta.platform,
-    updated_at: new Date().toISOString(),
+    nickname:                player.nickname,
+    avatar_url:              player.avatar_image,
+    city_level:              player.city_level,
+    training:                training as number,
+    construction:            construction as number,
+    general:                 general as number,
+    ip:                      meta.ip,
+    country:                 meta.country,
+    platform:                meta.platform,
+    updated_at:              new Date().toISOString(),
+    state:                   player.state,
+    power:                   player.power,
+    life_tree_level:         player.life_tree_level,
+    alliance_id:             player.alliance_id,
+    alliance_abbr:           player.alliance_abbr,
+    alliance_name:           player.alliance_name,
+    alliance_rank:           player.alliance_rank,
+    mystic_trial_score:      player.mystic_trial_score,
+    mystic_trial_rank:       player.mystic_trial_rank,
+    mystic_trial_kid:        player.mystic_trial_kid,
+    mystic_trial_updated_ts: player.mystic_trial_updated_ts,
+    v2_tag:                  player.v2_tag,
+    v2_last_refreshed_at:    player.v2_last_refreshed_at,
   };
   await dbPatch(`kvk_speedup_survey?kingshot_id=eq.${encodeURIComponent(auth.kingshotId)}`, patch);
   return { ok: true };
